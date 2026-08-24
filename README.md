@@ -20,10 +20,14 @@ Plus a few things Waybar can't do on its own:
 
 ## Screenshots
 
-<!-- Replace with your own captures -->
-| Bar | Network menu | Audio menu |
-|-----|--------------|------------|
-| ![bar](screenshots/bar.png) | ![network](screenshots/network.png) | ![audio](screenshots/audio.png) |
+![bar](screenshots/bar.png)
+
+| Audio | Keybindings | Overflow |
+|-------|-------------|----------|
+| ![audio](screenshots/audio.png) | ![keybindings](screenshots/keybinds.png) | ![overflow](screenshots/overflow.png) |
+
+Every module opens a popup like these — anchored under the module, closing on
+click-away or `Esc`, styled from the same CSS as the bar.
 
 ## Requirements
 

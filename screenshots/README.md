@@ -1,4 +1,5 @@
-Put your captures here: `bar.png`, `network.png`, `audio.png`
-(referenced from the main README).
+Captures used by the main README.
+
+Take your own with:
 
     grim -g "$(slurp)" screenshots/bar.png
