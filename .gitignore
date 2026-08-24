@@ -13,3 +13,7 @@ _bak_*
 *.bak
 *.orig
 *.tmp
+
+# Généré par generate-config.py (contient les chemins matériels résolus).
+# Suivi dans arch-config (sauvegarde), ignoré dans le dépôt public.
+config-active
