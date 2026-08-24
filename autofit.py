@@ -29,7 +29,7 @@ import subprocess
 import sys
 import time
 
-CONFIG_DIR = os.path.expanduser("~/.config/waybar")
+CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(CONFIG_DIR, "config-full")
 HIDDEN_FILE = os.path.join(CONFIG_DIR, "modules-hidden")
 AUTO_HIDDEN_FILE = os.path.join(CONFIG_DIR, "modules-hidden-auto")

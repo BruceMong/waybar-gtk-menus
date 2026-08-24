@@ -19,7 +19,7 @@ from gi.repository import Gtk, Gdk  # noqa: E402
 
 from menu_common import LayerPopup  # noqa: E402
 
-CONFIG_DIR = os.path.expanduser("~/.config/waybar")
+CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 REMOTE_SH = os.path.join(CONFIG_DIR, "remote-mode.sh")
 REMOTE_FLAG = "/tmp/remote-mode-active"
 DEVNULL = subprocess.DEVNULL

@@ -15,7 +15,7 @@ from gi.repository import Gtk  # noqa: E402
 
 from menu_common import LayerPopup  # noqa: E402
 
-CONFIG_DIR = os.path.expanduser("~/.config/waybar")
+CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 DND_TOGGLE = os.path.join(CONFIG_DIR, "dnd-toggle.sh")
 CLAUDE_FLAG = os.path.join(CONFIG_DIR, "claude-notify-focus.disabled")
 SOUND_FLAG = os.path.join(CONFIG_DIR, "notif-sound.enabled")

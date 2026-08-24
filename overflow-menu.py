@@ -17,7 +17,7 @@ from gi.repository import Gtk  # noqa: E402
 
 from menu_common import LayerPopup, apply_css  # noqa: E402
 
-CONFIG_DIR = os.path.expanduser("~/.config/waybar")
+CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 HIDDEN_FILE = os.path.join(CONFIG_DIR, "modules-hidden")
 AUTO_HIDDEN_FILE = os.path.join(CONFIG_DIR, "modules-hidden-auto")
 WB = CONFIG_DIR

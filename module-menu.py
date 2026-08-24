@@ -14,7 +14,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk, Gio, Gdk, GLib  # noqa: E402
 
-CONFIG_DIR = os.path.expanduser("~/.config/waybar")
+CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 HIDDEN_FILE = os.path.join(CONFIG_DIR, "modules-hidden")
 ACTIVE = os.path.join(CONFIG_DIR, "config-active")
 LINK = os.path.join(CONFIG_DIR, "config")

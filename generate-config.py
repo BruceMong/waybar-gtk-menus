@@ -9,7 +9,7 @@ Sortie          : config-active (lu par waybar via le symlink `config`).
 import json
 import os
 
-CONFIG_DIR = os.path.expanduser("~/.config/waybar")
+CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(CONFIG_DIR, "config-full")
 ACTIVE = os.path.join(CONFIG_DIR, "config-active")
 HIDDEN_FILE = os.path.join(CONFIG_DIR, "modules-hidden")
