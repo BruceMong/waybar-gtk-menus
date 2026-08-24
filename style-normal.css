@@ -1,0 +1,527 @@
+/* Catppuccin Mocha palette */
+@define-color base #1e1e2e;
+@define-color mantle #181825;
+@define-color crust #11111b;
+@define-color text #cdd6f4;
+@define-color subtext0 #a6adc8;
+@define-color blue #89b4fa;
+@define-color lavender #b4befe;
+@define-color sapphire #74c7ec;
+@define-color green #a6e3a1;
+@define-color peach #fab387;
+@define-color red #f38ba8;
+@define-color mauve #cba6f7;
+@define-color surface0 #313244;
+@define-color surface1 #45475a;
+@define-color overlay0 #6c7086;
+@define-color yellow #f9e2af;
+
+* {
+    font-family: "JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font", "Noto Sans Symbols 2", "Font Awesome 6 Free";
+    font-size: 13px;
+    border: none;
+    border-radius: 0;
+    min-height: 0;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+window#waybar {
+    background-color: @base;
+    color: @text;
+}
+
+/* ── Modules communs ── */
+#workspaces,
+#window,
+#clock,
+#battery,
+#backlight,
+#mpris,
+#idle_inhibitor,
+#tray {
+    padding: 0 9px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: @surface0;
+    color: @text;
+}
+
+/* ── Groupes drawer (tray / outils / système / connectivité / audio) :
+      une seule pilule, les modules internes sont transparents ── */
+#systray,
+#tools,
+#system,
+#connect,
+#audio {
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: @surface0;
+}
+
+#cpu,
+#temperature,
+#memory,
+#disk,
+#network,
+#bluetooth {
+    padding: 0 9px;
+    background-color: transparent;
+}
+
+/* Contenu révélé d'un drawer : légèrement détaché du module de tête, pour
+   qu'on voie ce qui vient de s'ouvrir. */
+.system-drawer,
+.connect-drawer,
+.audio-drawer,
+.tools-drawer,
+.tray-drawer {
+    background-color: @surface1;
+    border-radius: 8px;
+}
+
+/* ── Largeurs minimales : sans elles, 100% -> 99% -> 9% décale toute la
+      barre à chaque changement de valeur. ── */
+#battery,
+#backlight,
+#cpu,
+#memory,
+#disk {
+    min-width: 46px;
+}
+
+#temperature {
+    min-width: 56px;
+}
+
+#clock.date {
+    min-width: 92px;
+}
+
+#clock.time {
+    min-width: 52px;
+}
+
+#pulseaudio.percentage {
+    min-width: 34px;
+}
+
+#custom-dots {
+    min-width: 20px;
+}
+
+/* ── Retour au survol : tout module cliquable doit réagir ── */
+#clock:hover,
+#battery:hover,
+#backlight:hover,
+#mpris:hover,
+#privacy:hover,
+#systray:hover,
+#tools:hover,
+#system:hover,
+#connect:hover,
+#audio:hover,
+#custom-updates:hover,
+#systemd-failed-units:hover {
+    background-color: @surface1;
+}
+
+/* ── Disque ── */
+#disk {
+    color: @sapphire;
+}
+
+/* ── Unités systemd en échec (visible seulement en cas de problème) ── */
+#systemd-failed-units {
+    padding: 0 9px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: @surface0;
+    color: @red;
+    font-weight: bold;
+}
+
+/* ── Mises à jour en attente (masqué quand le système est à jour) ── */
+#custom-updates {
+    padding: 0 9px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: @surface0;
+    color: @yellow;
+}
+
+#custom-updates.many {
+    color: @peach;
+    font-weight: bold;
+}
+
+/* ── Workspaces ── */
+#workspaces button {
+    padding: 0 6px;
+    color: @subtext0;
+    background: transparent;
+    border-radius: 6px;
+}
+
+#workspaces button.active {
+    color: @base;
+    background-color: @blue;
+}
+
+#workspaces button:hover {
+    background-color: @surface1;
+    color: @text;
+}
+
+/* ── Bouton mode dizaines (+10) ── */
+#custom-ws-tens {
+    padding: 0 8px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: @surface0;
+    color: @overlay0;
+    font-weight: bold;
+}
+
+#custom-ws-tens.active {
+    color: @base;
+    background-color: @mauve;
+}
+
+#custom-ws-tens:hover {
+    background-color: @surface1;
+    color: @mauve;
+}
+
+#custom-ws-tens.active:hover {
+    background-color: @mauve;
+    color: @base;
+}
+
+/* ── Window title ── */
+#window {
+    color: @subtext0;
+    font-style: italic;
+}
+
+/* ── Clock ── */
+#clock {
+    color: @lavender;
+    font-weight: bold;
+}
+
+/* ── Battery ── */
+#battery {
+    color: @green;
+}
+
+#battery.charging {
+    color: @green;
+}
+
+#battery.warning:not(.charging) {
+    color: @peach;
+}
+
+#battery.critical:not(.charging) {
+    color: @red;
+    animation: blink 1s linear infinite;
+}
+
+@keyframes blink {
+    to { color: @text; }
+}
+
+/* ── CPU ── */
+#cpu {
+    color: @peach;
+}
+
+/* ── Température ── */
+#temperature {
+    color: @yellow;
+}
+
+#temperature.critical {
+    color: @red;
+    animation: blink 1s linear infinite;
+}
+
+/* ── Média (mpris) ── */
+#mpris {
+    color: @green;
+}
+
+#mpris.paused {
+    color: @overlay0;
+    font-style: italic;
+}
+
+/* ── Caféine (idle inhibitor) ── */
+#idle_inhibitor {
+    color: @overlay0;
+    font-size: 15px;
+}
+
+#idle_inhibitor.activated {
+    color: @peach;
+    font-weight: bold;
+}
+
+#idle_inhibitor:hover {
+    background-color: @surface1;
+    color: @text;
+}
+
+/* ── Confidentialité (micro / partage d'écran) ── */
+#privacy {
+    padding: 0 8px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: @surface0;
+}
+
+#privacy-item.screenshare {
+    color: @peach;
+    padding: 0 4px;
+}
+
+#privacy-item.audio-in {
+    color: @red;
+    padding: 0 4px;
+}
+
+/* ── Memory ── */
+#memory {
+    color: @mauve;
+}
+
+/* ── Network ── */
+#network {
+    color: @sapphire;
+}
+
+#network.disconnected {
+    color: @overlay0;
+}
+
+/* ── Bluetooth ── */
+#bluetooth {
+    color: @blue;
+}
+
+/* ── Audio (pilule définie avec les groupes, plus haut) ── */
+#pulseaudio {
+    background-color: transparent;
+    color: @mauve;
+}
+
+#pulseaudio.icon {
+    padding: 0 4px 0 9px;
+}
+
+#pulseaudio.percentage {
+    padding: 0 9px 0 4px;
+}
+
+#pulseaudio.muted {
+    color: @overlay0;
+}
+
+/* ── Backlight ── */
+#backlight {
+    color: @peach;
+}
+
+/* ── App launchers ── */
+#custom-chrome {
+    padding: 0 10px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: @surface0;
+    color: @text;
+    font-size: 15px;
+}
+
+#custom-chrome:hover {
+    background-color: @surface1;
+    color: @blue;
+}
+
+/* ── Profil énergie (power-profiles-daemon) ── */
+#power-profiles-daemon {
+    padding: 0 9px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: @surface0;
+    color: @text;
+    font-size: 15px;
+}
+
+#power-profiles-daemon.performance {
+    color: @peach;
+}
+
+#power-profiles-daemon.power-saver {
+    color: @green;
+}
+
+#power-profiles-daemon:hover {
+    background-color: @surface1;
+}
+
+/* ── Poignée du tray (déplie les icônes d'applications au survol) ── */
+#custom-tray-handle {
+    padding: 0 10px;
+    background-color: transparent;
+    color: @overlay0;
+}
+
+#systray:hover #custom-tray-handle {
+    color: @text;
+}
+
+/* ── Outils : œil (cacher/afficher), raccourcis, overflow (⋮) ── */
+#custom-toggle-info,
+#custom-keybinds,
+#custom-dots {
+    padding: 0 10px;
+    background-color: transparent;
+    color: @subtext0;
+    font-size: 15px;
+}
+
+#custom-toggle-info:hover,
+#custom-keybinds:hover,
+#custom-dots:hover {
+    color: @text;
+}
+
+/* Des modules ont été repliés faute de place : le « ⋮ » porte le compteur. */
+#custom-dots {
+    color: @overlay0;
+}
+
+#tools #custom-dots {
+    font-weight: bold;
+}
+
+/* ── Remote mode ── */
+#custom-remote {
+    padding: 0 10px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: @surface0;
+    color: @overlay0;
+    font-size: 15px;
+}
+
+#custom-remote.active {
+    color: @base;
+    background-color: @red;
+    font-weight: bold;
+}
+
+#custom-remote:hover {
+    background-color: @surface1;
+    color: @green;
+}
+
+#custom-remote.active:hover {
+    background-color: @red;
+    color: @base;
+}
+
+/* ── Do Not Disturb ── */
+/* ── Sessions Claude Code ── */
+/* La couleur reflète l'état le plus urgent : attente > terminé > en cours. */
+#custom-claude {
+    padding: 0 10px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: @surface0;
+    color: @lavender;
+}
+
+/* Au moins une session a fini : réponse à relire */
+#custom-claude.done {
+    color: @green;
+}
+
+/* Au moins une session attend une action : le plus urgent */
+#custom-claude.waiting {
+    color: @peach;
+    font-weight: bold;
+}
+
+#custom-claude:hover {
+    background-color: @surface1;
+}
+
+#custom-dnd {
+    padding: 0 10px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: @surface0;
+    color: @green;
+    font-size: 15px;
+}
+
+#custom-dnd.active {
+    color: @red;
+    font-weight: bold;
+}
+
+/* Effet « Notif Claude → fenêtre » désactivé : soulignement pêche (rappel) */
+#custom-dnd.claude-off {
+    box-shadow: inset 0 -2px 0 @peach;
+}
+
+/* Présence de notifications dans le centre */
+#custom-dnd.has-notifs {
+    color: @blue;
+}
+
+#custom-dnd.active.has-notifs {
+    color: @red;
+}
+
+#custom-dnd:hover {
+    background-color: @surface1;
+}
+
+/* ── Power ── */
+#custom-power {
+    padding: 0 12px;
+    margin: 4px 6px 4px 2px;
+    border-radius: 8px;
+    background-color: @surface0;
+    color: @red;
+    font-size: 15px;
+}
+
+#custom-power:hover {
+    background-color: @surface1;
+}
+
+/* ── Tray ── */
+#tray {
+    background-color: transparent;
+}
+
+/* ── Mode discret : barre masquée, seul l'œil flotte sur le côté ── */
+window#waybar.stealth {
+    background-color: transparent;
+}
+
+window#waybar.stealth #custom-toggle-info {
+    background-color: transparent;
+    color: @overlay0;
+    opacity: 0.5;
+    padding: 0 12px;
+    font-size: 15px;
+}
+
+window#waybar.stealth #custom-toggle-info:hover {
+    color: @text;
+    opacity: 1;
+}

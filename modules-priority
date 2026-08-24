@@ -1,0 +1,21 @@
+# Ordre de sacrifice des modules quand la barre manque de place.
+# Une ligne = une étape ; plusieurs ids sur la même ligne sont cachés
+# et ressortis ensemble. Du plus sacrifiable (haut) au moins (bas).
+#
+# Utilisé par autofit.py (repli automatique) et scroll-modules.sh (molette
+# sur « ⋮ »). Les modules absents de cette liste ne sont jamais repliés
+# automatiquement : workspaces, heure, notifications, batterie, réseau,
+# confidentialité, tray et power restent toujours visibles.
+#
+# Note : dans un groupe drawer, seul le premier module occupe de la place —
+# cacher les suivants ne libère rien. Les étapes ci-dessous cachent donc
+# les groupes entiers ou leur module de tête.
+hyprland/window
+mpris
+pulseaudio#percentage
+clock#date
+backlight
+power-profiles-daemon
+custom/chrome
+idle_inhibitor
+cpu temperature memory disk

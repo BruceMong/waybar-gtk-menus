@@ -1,0 +1,302 @@
+/* Catppuccin Mocha palette */
+@define-color base #1e1e2e;
+@define-color mantle #181825;
+@define-color crust #11111b;
+@define-color text #cdd6f4;
+@define-color subtext0 #a6adc8;
+@define-color blue #89b4fa;
+@define-color lavender #b4befe;
+@define-color sapphire #74c7ec;
+@define-color green #a6e3a1;
+@define-color peach #fab387;
+@define-color red #f38ba8;
+@define-color mauve #cba6f7;
+@define-color surface0 #313244;
+@define-color surface1 #45475a;
+@define-color overlay0 #6c7086;
+
+* {
+    font-family: "JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font", "Noto Sans Symbols 2", "Font Awesome 6 Free";
+    font-size: 13px;
+    border: none;
+    border-radius: 0;
+    min-height: 0;
+}
+
+/* === BARRE ROUGE EN MODE REMOTE === */
+window#waybar {
+    background-color: #a6293e;
+    color: @text;
+}
+
+/* ── Modules communs ── */
+#workspaces,
+#window,
+#clock,
+#battery,
+#cpu,
+#memory,
+#network,
+#bluetooth,
+#backlight,
+#tray {
+    padding: 0 12px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: rgba(0, 0, 0, 0.3);
+    color: @text;
+}
+
+/* ── Workspaces ── */
+#workspaces button {
+    padding: 0 6px;
+    color: @subtext0;
+    background: transparent;
+    border-radius: 6px;
+}
+
+#workspaces button.active {
+    color: @base;
+    background-color: @text;
+}
+
+#workspaces button:hover {
+    background-color: rgba(0, 0, 0, 0.3);
+    color: @text;
+}
+
+/* ── Bouton mode dizaines (+10) ── */
+#custom-ws-tens {
+    padding: 0 8px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: rgba(0, 0, 0, 0.3);
+    color: @subtext0;
+    font-weight: bold;
+}
+
+#custom-ws-tens.active {
+    color: #a6293e;
+    background-color: @mauve;
+}
+
+#custom-ws-tens:hover {
+    background-color: rgba(0, 0, 0, 0.5);
+    color: @mauve;
+}
+
+#custom-ws-tens.active:hover {
+    background-color: @mauve;
+    color: #a6293e;
+}
+
+/* ── Window title ── */
+#window {
+    color: @subtext0;
+    font-style: italic;
+}
+
+/* ── Clock ── */
+#clock {
+    color: @text;
+    font-weight: bold;
+}
+
+/* ── Battery ── */
+#battery {
+    color: @green;
+}
+
+#battery.charging {
+    color: @green;
+}
+
+#battery.warning:not(.charging) {
+    color: @peach;
+}
+
+#battery.critical:not(.charging) {
+    color: @red;
+    animation: blink 1s linear infinite;
+}
+
+@keyframes blink {
+    to { color: @text; }
+}
+
+/* ── CPU ── */
+#cpu {
+    color: @peach;
+}
+
+/* ── Memory ── */
+#memory {
+    color: @mauve;
+}
+
+/* ── Network ── */
+#network {
+    color: @sapphire;
+}
+
+#network.disconnected {
+    color: @overlay0;
+}
+
+/* ── Bluetooth ── */
+#bluetooth {
+    color: @blue;
+}
+
+/* ── Audio (groupe icône + pourcentage : une seule pilule) ── */
+#audio {
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: rgba(0, 0, 0, 0.3);
+}
+
+#pulseaudio {
+    background-color: transparent;
+    color: @mauve;
+}
+
+#pulseaudio.icon {
+    padding: 0 4px 0 12px;
+}
+
+#pulseaudio.percentage {
+    padding: 0 12px 0 4px;
+}
+
+#pulseaudio.muted {
+    color: @overlay0;
+}
+
+/* ── Backlight ── */
+#backlight {
+    color: @peach;
+}
+
+/* ── App launchers ── */
+#custom-chrome,
+#custom-vscode,
+#custom-thunar {
+    padding: 0 10px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: rgba(0, 0, 0, 0.3);
+    color: @text;
+    font-size: 15px;
+}
+
+#custom-chrome:hover,
+#custom-vscode:hover,
+#custom-thunar:hover {
+    background-color: rgba(0, 0, 0, 0.5);
+    color: @text;
+}
+
+/* ── Œil (cacher/afficher) et overflow (⋮) ── */
+#custom-toggle-info,
+#custom-dots {
+    padding: 0 10px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: rgba(0, 0, 0, 0.3);
+    color: @subtext0;
+    font-size: 15px;
+}
+
+#custom-toggle-info:hover,
+#custom-dots:hover {
+    background-color: rgba(0, 0, 0, 0.5);
+    color: @text;
+}
+
+/* ── Remote mode ── */
+#custom-remote {
+    padding: 0 10px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: @text;
+    color: #a6293e;
+    font-size: 15px;
+    font-weight: bold;
+}
+
+#custom-remote:hover {
+    background-color: @subtext0;
+    color: #a6293e;
+}
+
+/* ── Sessions Claude Code ── */
+#custom-claude {
+    padding: 0 10px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: rgba(0, 0, 0, 0.3);
+    color: @text;
+}
+
+#custom-claude.done {
+    color: @green;
+}
+
+#custom-claude.waiting {
+    background-color: @text;
+    color: #a6293e;
+    font-weight: bold;
+}
+
+/* ── Do Not Disturb ── */
+#custom-dnd {
+    padding: 0 10px;
+    margin: 4px 2px;
+    border-radius: 8px;
+    background-color: rgba(0, 0, 0, 0.3);
+    color: @text;
+    font-size: 15px;
+}
+
+#custom-dnd.active {
+    background-color: @text;
+    color: #a6293e;
+    font-weight: bold;
+}
+
+/* Effet « Notif Claude → fenêtre » désactivé : soulignement pêche (rappel) */
+#custom-dnd.claude-off {
+    box-shadow: inset 0 -2px 0 @peach;
+}
+
+/* Présence de notifications dans le centre */
+#custom-dnd.has-notifs {
+    color: @blue;
+}
+
+#custom-dnd.active.has-notifs {
+    color: #a6293e;
+}
+
+#custom-dnd:hover {
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* ── Power ── */
+#custom-power {
+    padding: 0 12px;
+    margin: 4px 6px 4px 2px;
+    border-radius: 8px;
+    background-color: rgba(0, 0, 0, 0.3);
+    color: @text;
+    font-size: 15px;
+}
+
+#custom-power:hover {
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* ── Tray ── */
+#tray {
+    background-color: transparent;
+}

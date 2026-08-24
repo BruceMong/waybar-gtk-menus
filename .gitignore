@@ -1,0 +1,15 @@
+# Caches Python
+__pycache__/
+*.pyc
+
+# État posé à l'exécution, propre à la machine
+modules-hidden-auto
+notif-sound.enabled
+claude-notify-focus.disabled
+
+# Sauvegardes et anciennes versions
+legacy/
+_bak_*
+*.bak
+*.orig
+*.tmp
