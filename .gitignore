@@ -13,3 +13,6 @@ _bak_*
 *.bak
 *.orig
 *.tmp
+
+# Généré par generate-config.py à l'installation
+config-active
