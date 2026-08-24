@@ -20,7 +20,7 @@ Trois entretiens sont faits à chaque lecture :
   - déduplication par pid : un même processus enchaîne plusieurs session_id
     (/clear, reprise, compactage) et seule la plus récente compte ;
   - les sessions « terminées » dont la fenêtre est à l'écran passent en
-    « idle » : si Bruce la regarde, la réponse est considérée comme lue et
+    « idle » : si l'utilisateur la regarde, la réponse est considérée comme lue et
     elle cesse de réclamer son attention.
 """
 import json
