@@ -74,35 +74,35 @@ DISPATCHER_LABEL = {
 
 EXTRA_CSS = b"""
 entry {
-    background-color: #313244;
-    color: #cdd6f4;
+    background-color: rgba(255, 255, 255, 0.09);
+    color: #ebebf0;
     border: none;
     border-radius: 8px;
     padding: 6px 10px;
 }
-entry:focus { outline: 2px solid #fab387; outline-offset: -2px; }
+entry:focus { outline: 2px solid rgba(10, 132, 255, 0.75); outline-offset: -2px; }
 label.section {
-    color: #fab387;
+    color: #ff9f0a;
     font-size: 11px;
     font-weight: bold;
     margin-top: 6px;
 }
-label.desc { color: #cdd6f4; }
-label.cmd { color: #6c7086; font-size: 10px; }
+label.desc { color: #ebebf0; }
+label.cmd { color: #68686f; font-size: 10px; }
 button.combo {
-    background-color: #313244;
-    color: #89b4fa;
+    background-color: rgba(255, 255, 255, 0.09);
+    color: #0a84ff;
     font-family: monospace;
     font-size: 11px;
     padding: 4px 10px;
     border-radius: 6px;
 }
-button.combo:hover { background-color: #45475a; color: #cdd6f4; }
-button.combo.capturing { background-color: #fab387; color: #1e1e2e; }
-button.combo.readonly { color: #6c7086; }
+button.combo:hover { background-color: rgba(255, 255, 255, 0.16); color: #ebebf0; }
+button.combo.capturing { background-color: #0a84ff; color: #ffffff; }
+button.combo.readonly { color: #68686f; }
 label.status { font-size: 11px; }
-label.status.err { color: #f38ba8; }
-label.status.ok { color: #a6e3a1; }
+label.status.err { color: #ff453a; }
+label.status.ok { color: #32d74b; }
 scrolledwindow { border-radius: 8px; }
 """
 

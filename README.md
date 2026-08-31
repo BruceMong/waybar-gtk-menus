@@ -35,12 +35,49 @@ Arch Linux + Hyprland. Everything else is optional but modules degrade to
 "hidden" rather than breaking the bar.
 
 ```bash
-sudo pacman -S waybar python-gobject gtk3 gtk-layer-shell \
+sudo pacman -S waybar python-gobject gtk3 gtk-layer-shell inter-font \
                networkmanager pipewire-pulse wireplumber brightnessctl \
                playerctl pacman-contrib
 # optional, per module:
 sudo pacman -S swaync hyprsunset hypridle bluez-utils
 ```
+
+### Translucent material
+
+The bar and the popups are drawn on a translucent background. GTK3 has no
+`backdrop-filter`, so the blur behind them can only come from the compositor.
+Without these two rules the background is merely see-through — windows show
+through in full detail and the text becomes unreadable. The CSS and the rules
+below are two halves of the same thing; do not ship one without the other.
+
+Add to `~/.config/hypr/hyprland.conf` (Hyprland 0.53+ block syntax):
+
+```
+layerrule {
+    name = waybar-material
+    match:namespace = ^(waybar)$
+    blur = on
+    ignore_alpha = 0.1
+}
+
+# The popups set this namespace themselves (menu_common.py). Matching the
+# generic `gtk-layer-shell` namespace instead would also catch the fullscreen
+# click-away surface, and blur the entire screen whenever a menu opens.
+layerrule {
+    name = waybar-popup-material
+    match:namespace = ^(waybar-popup)$
+    blur = on
+    ignore_alpha = 0.1
+}
+```
+
+On Hyprland 0.52 and earlier, the equivalent one-liners are
+`layerrule = blur, waybar` and `layerrule = ignorealpha 0.1, waybar`.
+
+A stronger blur than the Hyprland default suits the material — around
+`size = 8`, `passes = 3` in the `decoration { blur { ... } }` block. With
+opaque windows (`active_opacity = 1.0`) this only affects translucent
+surfaces, so the cost is limited to the bar and the popups.
 
 | Module | Needs |
 |--------|-------|

@@ -12,7 +12,9 @@
 # les groupes entiers ou leur module de tête.
 hyprland/window
 mpris
-pulseaudio#percentage
+# pulseaudio#percentage : NE PAS replier. C'est le 2e module du
+# drawer group/audio, donc le cacher ne libere aucune place (cf. note
+# ci-dessus), et c'est lui qui porte le on-click du menu son.
 clock#date
 backlight
 power-profiles-daemon

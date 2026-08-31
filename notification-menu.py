@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Popup Notifications pour Waybar (style menu luminosité).
 
-Ne pas déranger (switch + minuteries 30 min / 1 h), centre swaync, tout
-effacer, son des notifications, et effet « Notif Claude → fenêtre ».
+Réglages de notification : Ne pas déranger (switch + minuteries 30 min / 1 h),
+son des notifications, effet « Notif Claude → fenêtre », et passerelle vers le
+centre swaync.
+
+Le « Tout effacer » vit dans le centre swaync et pas ici : y effacer la pile
+sans la voir revient à jeter à l'aveugle.
 """
 import os
 import signal
@@ -43,13 +47,9 @@ class NotificationPopup(LayerPopup):
         self.box.pack_start(row, False, False, 0)
 
         # -- Actions swaync --
-        btn_center = Gtk.Button(label="󰂚  Centre de notifications")
+        btn_center = Gtk.Button(label="󰂚  Ouvrir le centre de notifications")
         btn_center.connect("clicked", self._on_center)
         self.box.pack_start(btn_center, False, False, 0)
-
-        btn_clear = Gtk.Button(label="󰎟  Tout effacer")
-        btn_clear.connect("clicked", self._on_clear)
-        self.box.pack_start(btn_clear, False, False, 0)
 
         # -- Son des notifications --
         self.box.pack_start(self._switch_row(
@@ -116,11 +116,6 @@ class NotificationPopup(LayerPopup):
 
     def _on_center(self, _btn):
         subprocess.Popen(["swaync-client", "--toggle-panel"],
-                         stdout=DEVNULL, stderr=DEVNULL)
-        self.close()
-
-    def _on_clear(self, _btn):
-        subprocess.Popen(["swaync-client", "--close-all"],
                          stdout=DEVNULL, stderr=DEVNULL)
         self.close()
 

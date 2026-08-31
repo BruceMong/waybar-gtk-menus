@@ -35,10 +35,10 @@ import time  # noqa: E402
 
 
 COLORS = {
-    "waiting": "#fab387",   # peach — réclame une action
-    "done": "#a6e3a1",      # green — terminé, à relire
-    "running": "#b4befe",   # lavender — travaille
-    "idle": "#a6adc8",      # subtext0 — au repos
+    "waiting": "#ff9f0a",   # peach — réclame une action
+    "done": "#32d74b",      # green — terminé, à relire
+    "running": "#5e9cff",   # lavender — travaille
+    "idle": "#9a9aa2",      # subtext0 — au repos
 }
 ICONS = {"waiting": "󰥔", "done": "󰄬", "running": "󰑮", "idle": "󰒲"}
 LABELS = {
@@ -47,8 +47,8 @@ LABELS = {
     "running": "travaille",
     "idle": "au repos",
 }
-DIM = "#a6adc8"
-FAINT = "#6c7086"
+DIM = "#9a9aa2"
+FAINT = "#68686f"
 
 POPUP_WIDTH = 560
 # Largeur maximale des libellés, en caractères. Indispensable : un label
@@ -59,48 +59,48 @@ WIDTH_CHARS = 42
 # Styles propres au popup, en complément de ceux de menu_common.
 EXTRA_CSS = b"""
 button.session {
-    background-color: #313244;
+    background-color: rgba(255, 255, 255, 0.09);
     padding: 8px 10px;
     border-radius: 8px;
 }
-button.session:hover { background-color: #45475a; }
-button.session.waiting { box-shadow: inset 3px 0 0 #fab387; }
-button.session.done    { box-shadow: inset 3px 0 0 #a6e3a1; }
-button.session.running { box-shadow: inset 3px 0 0 #b4befe; }
-button.session.idle    { box-shadow: inset 3px 0 0 #6c7086; }
+button.session:hover { background-color: rgba(255, 255, 255, 0.16); }
+button.session.waiting { box-shadow: inset 3px 0 0 #ff9f0a; }
+button.session.done    { box-shadow: inset 3px 0 0 #32d74b; }
+button.session.running { box-shadow: inset 3px 0 0 #5e9cff; }
+button.session.idle    { box-shadow: inset 3px 0 0 #68686f; }
 
 button.mini {
     background-color: transparent;
     padding: 2px 8px;
     min-height: 22px;
     font-size: 12px;
-    color: #a6adc8;
+    color: #9a9aa2;
 }
-button.mini:hover { background-color: #45475a; color: #cdd6f4; }
-button.danger:hover { background-color: #f38ba8; color: #1e1e2e; }
-button.armed { background-color: #f38ba8; color: #1e1e2e; }
+button.mini:hover { background-color: rgba(255, 255, 255, 0.16); color: #ebebf0; }
+button.danger:hover { background-color: #ff453a; color: #ffffff; }
+button.armed { background-color: #ff453a; color: #ffffff; }
 
 entry {
-    background-color: #1e1e2e;
-    color: #cdd6f4;
-    border: 1px solid #45475a;
+    background-color: rgba(0, 0, 0, 0.28);
+    color: #ebebf0;
+    border: 1px solid #3a3a3c;
     border-radius: 6px;
     padding: 4px 8px;
 }
-entry:focus { border-color: #fab387; }
+entry:focus { border-color: #ff9f0a; }
 
 progressbar trough {
-    background-color: #313244;
+    background-color: rgba(255, 255, 255, 0.09);
     border-radius: 3px;
     min-height: 4px;
     border: none;
 }
 progressbar progress { border-radius: 3px; min-height: 4px; }
-progressbar.ctx-ok progress   { background-color: #a6e3a1; }
-progressbar.ctx-warn progress { background-color: #fab387; }
-progressbar.ctx-full progress { background-color: #f38ba8; }
+progressbar.ctx-ok progress   { background-color: #32d74b; }
+progressbar.ctx-warn progress { background-color: #ff9f0a; }
+progressbar.ctx-full progress { background-color: #ff453a; }
 
-separator { background-color: #313244; min-height: 1px; }
+separator { background-color: rgba(255, 255, 255, 0.09); min-height: 1px; }
 """
 
 
@@ -249,7 +249,7 @@ class ClaudeMenu(LayerPopup):
 
     def _session_row(self, session, now):
         status = session.get("status", "idle")
-        colour = COLORS.get(status, "#cdd6f4")
+        colour = COLORS.get(status, "#ebebf0")
         wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
 
         # -- Ligne principale : le clic saute sur la session --

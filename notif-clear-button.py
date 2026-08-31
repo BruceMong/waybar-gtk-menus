@@ -54,9 +54,9 @@ MARGIN_TOP = 4
 CSS = b"""
 window { background-color: transparent; }
 button.clear-pill {
-    background-color: #313244;
-    color: #cdd6f4;
-    border: 1px solid #45475a;
+    background-color: rgba(255, 255, 255, 0.09);
+    color: #ebebf0;
+    border: 1px solid #3a3a3c;
     border-radius: 14px;
     padding: 3px 14px;
     min-height: 22px;
@@ -64,7 +64,7 @@ button.clear-pill {
     font-size: 12px;
     box-shadow: none;
 }
-button.clear-pill:hover { background-color: #f38ba8; color: #1e1e2e; border-color: #f38ba8; }
+button.clear-pill:hover { background-color: #ff453a; color: #ffffff; border-color: #ff453a; }
 """
 
 

@@ -19,7 +19,7 @@ ZONES = ("modules-left", "modules-center", "modules-right")
 
 # Mode "dizaines" (+10) : fichier témoin posé/retiré par ws-tens-toggle.sh
 TENS_FLAG = "/tmp/waybar-ws-tens"
-TENS_COLOR = "#cba6f7"  # mauve Catppuccin
+TENS_COLOR = "#ebebf0"  # encre primaire (barre monochrome)
 
 # Mode "discret" : fichier témoin posé/retiré par stealth.sh
 # Quand actif, toute la barre est masquée sauf l'œil (clic = ressortir).
@@ -139,7 +139,7 @@ def apply_overflow_badge(cfg, auto_hidden):
         return
     n = len(auto_hidden)
     if n:
-        dots["format"] = "⋮ <span color='#fab387'>%d</span>" % n
+        dots["format"] = "⋮ <span color='#ebebf0'>%d</span>" % n
         dots["tooltip"] = (
             "%d module(s) repliés faute de place — clic pour y accéder\n"
             "molette bas : cacher un module | molette haut : ressortir" % n

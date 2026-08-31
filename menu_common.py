@@ -4,7 +4,7 @@
 Fournit une fenêtre GTK3 sur le layer overlay (gtk-layer-shell), ancrée en
 haut à droite, avec :
   - fermeture par Échap / Entrée / clic en dehors / bouton croix (✕)
-  - thème Catppuccin Mocha identique au menu luminosité
+  - matériau translucide flouté par le compositeur, palette système macOS
   - un en-tête (titre + croix) déjà construit dans self.box
 """
 
@@ -16,51 +16,89 @@ gi.require_version("GtkLayerShell", "0.1")
 from gi.repository import Gtk, Gdk, GLib, GtkLayerShell  # noqa: E402
 
 
-CSS = b"""
-window {
-    background-color: #1e1e2e;
-    color: #cdd6f4;
-    border-radius: 12px;
-    border: 1px solid #45475a;
+CSS = """
+/* Même pile que la barre : Inter (ou Adwaita Sans, son dérivé déjà présent)
+   pour le texte, Nerd Font en queue pour les glyphes. Sans cette règle les
+   popups héritent du gtk-font-name système, ici une monospace — ce qui suffit
+   à trahir l'ensemble. */
+window, label, button, entry, switch, scale, list, row, popover, menu {
+    font-family: "Inter", "Adwaita Sans", "SF Pro Text",
+                 "JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font",
+                 "Symbols Nerd Font", "Noto Sans Symbols 2";
 }
-label { color: #cdd6f4; }
-scale trough { background-color: #313244; border-radius: 4px; min-height: 8px; }
-scale highlight { background-color: #fab387; border-radius: 4px; min-height: 8px; }
+/* Popover façon macOS : matériau translucide, coins arrondis, bordure
+   spéculaire d'un pixel. Le flou vient du compositeur (bloc `layerrule`
+   waybar-popup dans hyprland.conf), pas d'ici — GTK3 n'a pas de
+   backdrop-filter. La fenêtre reçoit un visual RGBA côté Python, sans quoi
+   l'alpha serait aplati sur du noir et les coins arrondis laisseraient des
+   angles noirs. */
+window {
+    background-color: rgba(30, 30, 32, 0.72);
+    color: #ebebf0;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+}
+label { color: #ebebf0; }
+
+/* ── Curseurs ── */
+scale trough {
+    background-color: rgba(255, 255, 255, 0.14);
+    border-radius: 4px;
+    min-height: 8px;
+}
+scale highlight {
+    background-color: #0a84ff;
+    border-radius: 4px;
+    min-height: 8px;
+}
 scale slider {
-    background-color: #cdd6f4;
+    background-color: #ffffff;
     border-radius: 50%;
     min-width: 18px;
     min-height: 18px;
     margin: -5px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
-scale value { color: #a6adc8; font-size: 12px; }
-scale mark label { color: #6c7086; font-size: 10px; }
+scale value { color: #9a9aa2; font-size: 12px; }
+scale mark label { color: #68686f; font-size: 10px; }
+
+/* ── Interrupteurs ── */
 switch {
-    background-color: #313244;
+    background-color: rgba(255, 255, 255, 0.16);
     border-radius: 12px;
     min-width: 40px;
     min-height: 20px;
 }
-switch:checked { background-color: #fab387; }
+switch:checked { background-color: #0a84ff; }
 switch slider {
-    background-color: #cdd6f4;
+    background-color: #ffffff;
     border-radius: 50%;
     min-width: 16px;
     min-height: 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
+
+/* ── Boutons ──
+   Remplissage translucide plutôt qu'une couleur pleine : posé sur le
+   matériau, il reste solidaire du fond au lieu de flotter dessus. */
 button {
-    background-color: #313244;
-    color: #cdd6f4;
+    background-color: rgba(255, 255, 255, 0.09);
+    color: #ebebf0;
     border: none;
     box-shadow: none;
-    border-radius: 8px;
+    border-radius: 7px;
     padding: 8px 12px;
 }
-button:hover { background-color: #45475a; }
-button.accent { background-color: #fab387; color: #1e1e2e; }
-button.accent:hover { background-color: #f9a06a; }
+button:hover { background-color: rgba(255, 255, 255, 0.16); }
+button:active { background-color: rgba(255, 255, 255, 0.22); }
+
+/* Bouton d'action principale : bleu système, encre blanche — sur macOS le
+   texte d'un bouton accentué est blanc, jamais la couleur du fond. */
+button.accent { background-color: #0a84ff; color: #ffffff; }
+button.accent:hover { background-color: #409cff; }
+
 button.close-btn {
-    color: #a6adc8;
+    color: #9a9aa2;
     background: none;
     padding: 0 6px;
     min-width: 24px;
@@ -68,11 +106,12 @@ button.close-btn {
     font-size: 14px;
 }
 button.close-btn:hover {
-    color: #f38ba8;
-    background-color: #313244;
+    color: #ff453a;
+    background-color: rgba(255, 69, 58, 0.18);
     border-radius: 6px;
 }
-/* Element actuellement selectionne au clavier. */
+
+/* ── Focus clavier : anneau bleu, comme le focus ring système ── */
 button:focus,
 switch:focus,
 scale:focus,
@@ -80,26 +119,14 @@ row:focus,
 list row:focus,
 checkbutton:focus,
 *:focus {
-    outline: 2px solid #fab387;
+    outline: 2px solid rgba(10, 132, 255, 0.75);
     outline-offset: -2px;
 }
-/* Variante bleue : ajouter la classe "blue" a la fenetre (window.blue) pour
-   remplacer l'accent peche par du bleu, plus lisible sur fond sombre. */
-window.blue button.accent { background-color: #89b4fa; color: #1e1e2e; }
-window.blue button.accent:hover { background-color: #74a8f0; }
-window.blue switch:checked { background-color: #89b4fa; }
-window.blue scale highlight { background-color: #89b4fa; }
-window.blue button:focus,
-window.blue switch:focus,
-window.blue scale:focus,
-window.blue row:focus,
-window.blue list row:focus,
-window.blue checkbutton:focus,
-window.blue *:focus {
-    outline: 2px solid #89b4fa;
-    outline-offset: -2px;
-}
-"""
+
+/* Variante « blue » : conservée pour les menus qui ajoutent encore la classe
+   à leur fenêtre. L'accent étant désormais bleu partout, elle ne modifie plus
+   rien — la garder évite de devoir toucher chaque appelant. */
+""".encode()
 
 
 def apply_css():
@@ -130,6 +157,20 @@ class LayerPopup(Gtk.Window):
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.RIGHT, True)
         GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, margin_top)
         GtkLayerShell.set_margin(self, GtkLayerShell.Edge.RIGHT, margin_right)
+
+        # Namespace dédié : c'est lui que cible le bloc `layerrule`
+        # waybar-popup dans hyprland.conf. Sans namespace propre on ne
+        # pourrait viser que « gtk-layer-shell », ce qui engloberait la
+        # fenêtre de fermeture plein écran ci-dessous — et flouterait donc
+        # tout l'écran dès l'ouverture d'un menu.
+        GtkLayerShell.set_namespace(self, "waybar-popup")
+
+        # Visual RGBA : sans lui GTK aplatit l'alpha du fond sur du noir. Le
+        # matériau translucide et les coins arrondis en dépendent tous les
+        # deux (sinon les angles restent noirs).
+        _visual = Gdk.Screen.get_default().get_rgba_visual()
+        if _visual is not None:
+            self.set_visual(_visual)
 
         self.set_default_size(width, -1)
         self.set_resizable(False)

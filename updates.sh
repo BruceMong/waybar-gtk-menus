@@ -2,8 +2,8 @@
 # Module custom/updates : nombre de mises à jour en attente (dépôts + AUR).
 #
 #   sans argument : émet le JSON du module (text/tooltip/class)
-#   --menu        : ouvre un terminal flottant listant les MAJ, avec option
-#                   pour lancer `yay -Syu`
+#   --menu        : ouvre le popup GTK « Mises à jour » (updates-menu.py)
+#   --refresh     : recompte et rafraîchit immédiatement le module dans la barre
 #
 # Le module disparaît de la barre quand il n'y a rien à mettre à jour
 # (text vide -> waybar masque le module).
@@ -11,6 +11,7 @@
 set -uo pipefail
 
 CACHE="/tmp/waybar-updates.cache"
+DIR="$(dirname "$(readlink -f "$0")")"
 
 collect() {
     # checkupdates (pacman-contrib) : synchro dans une base temporaire,
@@ -24,24 +25,21 @@ collect() {
 
 count_lines() { grep -c . <<< "${1:-}" || true; }
 
-if [ "${1:-}" = "--menu" ]; then
-    [ -f "$CACHE" ] || collect > /dev/null
-    exec kitty --class waybar.modules -T "Mises à jour" \
-        bash -c '
-            printf "\033[1;35m── Dépôts officiels ──\033[0m\n"
-            sed -n "1,/^---$/p" '"$CACHE"' | grep -v "^---$" | grep . || echo "  (aucune)"
-            printf "\n\033[1;35m── AUR ──\033[0m\n"
-            sed -n "/^---$/,\$p" '"$CACHE"' | grep -v "^---$" | grep . || echo "  (aucune)"
-            printf "\n\033[1mLancer la mise à jour complète (yay -Syu) ? [o/N] \033[0m"
-            read -r rep
-            case "$rep" in
-                [oOyY]) yay -Syu ;;
-                *) exit 0 ;;
-            esac
-            printf "\nTerminé — Entrée pour fermer."
-            read -r _
-        '
-fi
+case "${1:-}" in
+    --menu)
+        # Le popup lit le cache ; on le crée s'il manque pour éviter d'ouvrir
+        # une fenêtre vide au premier clic.
+        [ -f "$CACHE" ] || collect > /dev/null
+        exec python3 "$DIR/updates-menu.py"
+        ;;
+    --refresh)
+        # Recompte puis demande à waybar de réexécuter le module (signal 10),
+        # sinon l'affichage reste figé jusqu'au prochain intervalle (30 min).
+        collect > /dev/null
+        pkill -RTMIN+10 waybar 2>/dev/null
+        exit 0
+        ;;
+esac
 
 out="$(collect)"
 repo_list="$(sed -n '1,/^---$/p' <<< "$out" | grep -v '^---$')"
@@ -56,12 +54,16 @@ if [ "$total" -eq 0 ]; then
     exit 0
 fi
 
-# Tooltip : les 15 premiers paquets, pour rester lisible.
+# Tooltip : résumé lisible, puis les 10 premiers paquets.
 tooltip="$total mise(s) à jour — $n_repo dépôts, $n_aur AUR"
-preview="$(printf '%s\n%s\n' "$repo_list" "$aur_list" | grep . | head -15)"
+# Noms exacts (un espace suit) : linux-api-headers n'impose pas de reboot.
+if grep -qE '^((linux|linux-zen|linux-lts|linux-firmware|systemd|glibc|mesa|amd-ucode|intel-ucode) |nvidia)' <<< "$repo_list"; then
+    tooltip+=$'\n''⚠ noyau ou pilotes concernés : redémarrage nécessaire ensuite'
+fi
+preview="$(printf '%s\n%s\n' "$repo_list" "$aur_list" | grep . | head -10)"
 [ -n "$preview" ] && tooltip+=$'\n\n'"$preview"
-[ "$total" -gt 15 ] && tooltip+=$'\n'"… et $(( total - 15 )) autres"
-tooltip+=$'\n\n''clic : voir la liste / mettre à jour'
+[ "$total" -gt 10 ] && tooltip+=$'\n'"… et $(( total - 10 )) autres"
+tooltip+=$'\n\n''clic : détail par catégorie et mise à jour'
 
 class="pending"
 [ "$total" -ge 30 ] && class="many"

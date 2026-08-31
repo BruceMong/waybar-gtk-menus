@@ -59,6 +59,15 @@ class BrightnessPopup(Gtk.Window):
         GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, 40)
         GtkLayerShell.set_margin(self, GtkLayerShell.Edge.RIGHT, 150)
 
+        # Namespace dédié, visé par le bloc `layerrule` waybar-popup dans
+        # hyprland.conf. Le visual RGBA est ce qui permet à l'alpha du fond
+        # d'exister : sans lui GTK l'aplatit sur du noir, et les coins
+        # arrondis laissent des angles noirs.
+        GtkLayerShell.set_namespace(self, "waybar-popup")
+        _visual = Gdk.Screen.get_default().get_rgba_visual()
+        if _visual is not None:
+            self.set_visual(_visual)
+
         self.set_default_size(340, 300)
         self.set_resizable(False)
 
@@ -243,58 +252,67 @@ class BrightnessPopup(Gtk.Window):
         self._pip_opacity_timeout_id = None
 
     def _apply_css(self):
-        css = b"""
+        css = """
+        /* Même pile que la barre : Inter (ou Adwaita Sans, son dérivé déjà présent)
+           pour le texte, Nerd Font en queue pour les glyphes. Sans cette règle les
+           popups héritent du gtk-font-name système, ici une monospace — ce qui suffit
+           à trahir l'ensemble. */
+        window, label, button, entry, switch, scale, list, row, popover, menu {
+            font-family: "Inter", "Adwaita Sans", "SF Pro Text",
+                         "JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font",
+                         "Symbols Nerd Font", "Noto Sans Symbols 2";
+        }
         window {
-            background-color: #1e1e2e;
-            color: #cdd6f4;
+            background-color: rgba(30, 30, 32, 0.72);
+            color: #ebebf0;
             border-radius: 12px;
-            border: 1px solid #45475a;
+            border: 1px solid rgba(255, 255, 255, 0.14);
         }
         label {
-            color: #cdd6f4;
+            color: #ebebf0;
         }
         scale trough {
-            background-color: #313244;
+            background-color: rgba(255, 255, 255, 0.09);
             border-radius: 4px;
             min-height: 8px;
         }
         scale highlight {
-            background-color: #fab387;
+            background-color: #0a84ff;
             border-radius: 4px;
             min-height: 8px;
         }
         scale slider {
-            background-color: #cdd6f4;
+            background-color: #ffffff;
             border-radius: 50%;
             min-width: 18px;
             min-height: 18px;
             margin: -5px;
         }
         scale value {
-            color: #a6adc8;
+            color: #9a9aa2;
             font-size: 12px;
         }
         scale mark label {
-            color: #6c7086;
+            color: #68686f;
             font-size: 10px;
         }
         switch {
-            background-color: #313244;
+            background-color: rgba(255, 255, 255, 0.09);
             border-radius: 12px;
             min-width: 40px;
             min-height: 20px;
         }
         switch:checked {
-            background-color: #fab387;
+            background-color: #0a84ff;
         }
         switch slider {
-            background-color: #cdd6f4;
+            background-color: #ffffff;
             border-radius: 50%;
             min-width: 16px;
             min-height: 16px;
         }
         button.close-btn {
-            color: #a6adc8;
+            color: #9a9aa2;
             background: none;
             border: none;
             box-shadow: none;
@@ -304,15 +322,15 @@ class BrightnessPopup(Gtk.Window):
             font-size: 14px;
         }
         button.close-btn:hover {
-            color: #f38ba8;
-            background-color: #313244;
+            color: #ff453a;
+            background-color: rgba(255, 255, 255, 0.09);
             border-radius: 6px;
         }
         scale:focus, button:focus, switch:focus, *:focus {
-            outline: 2px solid #fab387;
+            outline: 2px solid rgba(10, 132, 255, 0.75);
             outline-offset: -2px;
         }
-        """
+        """.encode()
         provider = Gtk.CssProvider()
         provider.load_from_data(css)
         Gtk.StyleContext.add_provider_for_screen(

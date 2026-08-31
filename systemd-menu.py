@@ -92,7 +92,7 @@ class SystemdPopup(LayerPopup):
         units = failed_units()
         if not units:
             lbl = Gtk.Label(xalign=0)
-            lbl.set_markup("<span foreground='#a6e3a1'>󰄬  "
+            lbl.set_markup("<span foreground='#32d74b'>󰄬  "
                            "Aucune unité en échec</span>")
             self.content.pack_start(lbl, False, False, 0)
             self.content.show_all()
@@ -115,15 +115,15 @@ class SystemdPopup(LayerPopup):
         title = Gtk.Label(xalign=0)
         tag = "system" if scope == "system" else "user"
         title.set_markup(
-            "<b><span foreground='#f38ba8'>%s</span></b>"
-            "  <span foreground='#6c7086' size='small'>%s</span>"
+            "<b><span foreground='#ff453a'>%s</span></b>"
+            "  <span foreground='#68686f' size='small'>%s</span>"
             % (GLib.markup_escape_text(unit), tag))
         title.set_line_wrap(True)
         frame.pack_start(title, False, False, 0)
 
         if desc:
             lbl = Gtk.Label(xalign=0)
-            lbl.set_markup("<span foreground='#a6adc8' size='small'>%s</span>"
+            lbl.set_markup("<span foreground='#9a9aa2' size='small'>%s</span>"
                            % GLib.markup_escape_text(desc))
             lbl.set_line_wrap(True)
             frame.pack_start(lbl, False, False, 0)
@@ -131,7 +131,7 @@ class SystemdPopup(LayerPopup):
         err = unit_error(scope, unit)
         if err:
             lbl = Gtk.Label(xalign=0)
-            lbl.set_markup("<span foreground='#f9e2af' size='x-small'>"
+            lbl.set_markup("<span foreground='#ffd60a' size='x-small'>"
                            "<tt>%s</tt></span>" % GLib.markup_escape_text(err))
             lbl.set_line_wrap(True)
             lbl.set_max_width_chars(52)

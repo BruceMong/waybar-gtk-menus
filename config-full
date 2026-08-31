@@ -2,12 +2,12 @@
     "layer": "top",
     "position": "top",
     "height": 34,
-    "spacing": 4,
+    "spacing": 2,
     "reload_style_on_change": true,
 
     "modules-left": ["hyprland/workspaces", "custom/ws-tens", "custom/chrome", "hyprland/window", "mpris"],
     "modules-center": ["clock#time", "clock#date"],
-    "modules-right": ["privacy", "group/systray", "group/tools", "custom/claude", "custom/dnd", "custom/updates", "systemd-failed-units", "group/system", "group/connect", "group/audio", "backlight", "idle_inhibitor", "power-profiles-daemon", "battery", "custom/power"],
+    "modules-right": ["custom/recorder", "privacy", "group/systray", "group/tools", "custom/claude", "custom/dnd", "custom/updates", "systemd-failed-units", "group/system", "group/connect", "group/audio", "backlight", "idle_inhibitor", "power-profiles-daemon", "battery", "custom/power"],
 
     "defaults": {
         "clock": {
@@ -17,9 +17,9 @@
                 "mode": "month",
                 "on-scroll": 1,
                 "format": {
-                    "months": "<span color='#cba6f7'><b>{}</b></span>",
-                    "weekdays": "<span color='#fab387'><b>{}</b></span>",
-                    "today": "<span color='#f38ba8'><b><u>{}</u></b></span>"
+                    "months": "<span color='#ebebf0'><b>{}</b></span>",
+                    "weekdays": "<span color='#9a9aa2'><b>{}</b></span>",
+                    "today": "<span color='#0a84ff'><b><u>{}</u></b></span>"
                 }
             },
             "actions": {
@@ -236,6 +236,7 @@
             "default": ["󰕿", "󰖀", "󰕾"]
         },
         "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
+        "on-click-right": "~/.config/waybar/sound-menu.py",
         "on-scroll-up": "wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ 5%+",
         "on-scroll-down": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
     },
@@ -332,6 +333,14 @@
         "interval": 10,
         "signal": 11,
         "on-click": "~/.config/waybar/claude-menu.py"
+    },
+
+    "custom/recorder": {
+        "format": "{}",
+        "return-type": "json",
+        "exec": "$HOME/.config/waybar/recorder-status.sh",
+        "restart-interval": 5,
+        "on-click": "pkill wf-recorder"
     },
 
     "custom/dnd": {

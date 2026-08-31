@@ -26,8 +26,8 @@ DEVNULL = subprocess.DEVNULL
 
 # CSS local : boutons « danger » rouges (en plus du thème commun).
 EXTRA_CSS = b"""
-button.danger { background-color: #45293a; color: #f38ba8; }
-button.danger:hover { background-color: #f38ba8; color: #1e1e2e; }
+button.danger { background-color: #45293a; color: #ff453a; }
+button.danger:hover { background-color: #ff453a; color: #ffffff; }
 """
 
 

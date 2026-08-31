@@ -34,15 +34,15 @@ METER_DECAY = 0.30         # vitesse de retombée (0 = figé, 1 = instantané)
 
 METER_CSS = b"""
 levelbar trough {
-    background-color: #313244;
+    background-color: rgba(255, 255, 255, 0.09);
     border-radius: 5px;
     min-height: 10px;
     padding: 0;
 }
 levelbar block { border-radius: 5px; }
-levelbar block.filled, levelbar block.low { background-color: #a6e3a1; }
-levelbar block.high { background-color: #f9e2af; }
-levelbar block.full { background-color: #f38ba8; }
+levelbar block.filled, levelbar block.low { background-color: #32d74b; }
+levelbar block.high { background-color: #ffd60a; }
+levelbar block.full { background-color: #ff453a; }
 levelbar block.empty { background-color: transparent; }
 """
 
@@ -111,7 +111,7 @@ class SoundPopup(LayerPopup):
             if mmuted:
                 lbl.set_markup(
                     "<b>🎤  Micro  "
-                    "<span color='#f38ba8'>(coupé)</span></b>")
+                    "<span color='#ff453a'>(coupé)</span></b>")
             else:
                 lbl.set_markup("<b>🎤  Micro</b>")
             self.box.pack_start(lbl, False, False, 0)
@@ -125,7 +125,7 @@ class SoundPopup(LayerPopup):
             # VU-mètre : niveau d'entrée en temps réel.
             lbl = Gtk.Label(xalign=0)
             lbl.set_markup(
-                "<span size='small' color='#a6adc8'>Niveau d'entrée</span>")
+                "<span size='small' color='#9a9aa2'>Niveau d'entrée</span>")
             self.box.pack_start(lbl, False, False, 0)
             self.meter = Gtk.LevelBar.new_for_interval(0.0, 1.0)
             self.meter.set_mode(Gtk.LevelBarMode.CONTINUOUS)

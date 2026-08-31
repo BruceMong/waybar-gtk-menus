@@ -1,36 +1,72 @@
-/* Catppuccin Mocha palette */
-@define-color base #1e1e2e;
-@define-color mantle #181825;
-@define-color crust #11111b;
-@define-color text #cdd6f4;
-@define-color subtext0 #a6adc8;
-@define-color blue #89b4fa;
-@define-color lavender #b4befe;
-@define-color sapphire #74c7ec;
-@define-color green #a6e3a1;
-@define-color peach #fab387;
-@define-color red #f38ba8;
-@define-color mauve #cba6f7;
-@define-color surface0 #313244;
-@define-color surface1 #45475a;
-@define-color overlay0 #6c7086;
-@define-color yellow #f9e2af;
+/* ═══════════════════════════════════════════════════════════════════════════
+   Waybar — menu bar façon macOS
+   ───────────────────────────────────────────────────────────────────────────
+   Trois principes, dont découle tout le reste :
+
+   1. UNE SEULE SURFACE. La barre est un matériau translucide continu ; aucun
+      module n'a de fond propre. Le fond n'apparaît qu'au survol, et seulement
+      sous l'élément survolé. C'est ce qui distingue une menu bar système d'un
+      alignement de boutons.
+
+   2. MONOCHROME. La hiérarchie se fait par l'opacité de l'encre (ink / ink2 /
+      ink3), jamais par la teinte. Les couleurs système ne servent qu'à
+      signaler un état ANORMAL : batterie critique, surchauffe, enregistrement
+      en cours, unité systemd en échec. Si tout est coloré, plus rien n'alerte.
+
+   3. TRANSLUCIDITÉ. Le fond est en rgba, pas opaque. Le flou est produit par
+      le compositeur, pas par le CSS (GTK3 n'a pas de backdrop-filter) :
+      voir le bloc `layerrule` waybar dans hyprland.conf. Sans cette règle la
+      barre est simplement semi-transparente, ce qui est laid — les deux
+      moitiés vont ensemble.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Encre : hiérarchie par opacité ── */
+@define-color ink   #ebebf0;  /* primaire   — valeurs, icônes actives */
+@define-color ink2  #9a9aa2;  /* secondaire — libellés, contexte */
+@define-color ink3  #68686f;  /* tertiaire  — inactif, désactivé */
+
+/* ── Remplissages (survol / sélection) ── */
+@define-color fill     rgba(255, 255, 255, 0.10);
+@define-color fillHard rgba(255, 255, 255, 0.17);
+
+/* ── Couleurs système Apple (dark mode) — usage réservé aux anomalies ── */
+@define-color sysRed    #ff453a;
+@define-color sysOrange #ff9f0a;
+@define-color sysBlue   #0a84ff;
 
 * {
-    font-family: "JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font", "Noto Sans Symbols 2", "Font Awesome 6 Free";
+    /* Inter en tête (paquet `inter-font`), Adwaita Sans en repli — c'est un
+       dérivé d'Inter, déjà installé, donc le rendu est identique sans rien
+       ajouter. Les Nerd Font restent en queue de pile : Pango pioche le
+       premier fichier qui possède le glyphe, donc les icônes continuent de
+       sortir de JetBrainsMono pendant que le texte sort d'Inter. */
+    font-family: "Inter", "Adwaita Sans", "SF Pro Text",
+                 "JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font",
+                 "Symbols Nerd Font", "Noto Sans Symbols 2", "Font Awesome 6 Free";
     font-size: 13px;
+    font-weight: 500;
     border: none;
     border-radius: 0;
     min-height: 0;
-    transition: background-color 0.2s ease, color 0.2s ease;
+    box-shadow: none;
+    text-shadow: none;
+    transition: background-color 160ms cubic-bezier(0.4, 0, 0.2, 1),
+                color 160ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ── Le matériau ──
+   #1c1c1e à 55% : la teinte de la menu bar macOS en mode sombre. Le hairline
+   du bas remplace la bordure — une menu bar système ne « flotte » pas, elle
+   se termine sur une ligne d'un pixel. */
 window#waybar {
-    background-color: @base;
-    color: @text;
+    background-color: rgba(30, 30, 32, 0.42);
+    color: @ink;
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.07);
 }
 
-/* ── Modules communs ── */
+/* ═══ Modules de premier niveau ═══
+   Transparents par défaut. La géométrie (padding/margin/radius) est posée ici
+   une fois pour toutes : elle définit la pilule qui apparaîtra au survol. */
 #workspaces,
 #window,
 #clock,
@@ -38,78 +74,61 @@ window#waybar {
 #backlight,
 #mpris,
 #idle_inhibitor,
-#tray {
-    padding: 0 9px;
-    margin: 4px 2px;
-    border-radius: 8px;
-    background-color: @surface0;
-    color: @text;
-}
-
-/* ── Groupes drawer (tray / outils / système / connectivité / audio) :
-      une seule pilule, les modules internes sont transparents ── */
+#privacy,
+#tray,
 #systray,
 #tools,
 #system,
 #connect,
-#audio {
-    margin: 4px 2px;
-    border-radius: 8px;
-    background-color: @surface0;
+#audio,
+#custom-chrome,
+#custom-claude,
+#custom-dnd,
+#custom-power,
+#custom-remote,
+#custom-recorder,
+#custom-updates,
+#custom-ws-tens,
+#power-profiles-daemon,
+#systemd-failed-units {
+    background-color: transparent;
+    color: @ink;
+    padding: 0 8px;
+    margin: 3px 1px;
+    border-radius: 7px;
 }
 
+/* ═══ Modules internes aux groupes ═══
+   Ils vivent DANS une pilule de groupe : pas de marge propre (sinon la pilule
+   de survol du groupe se retrouve doublée), pas de rayon propre. */
 #cpu,
 #temperature,
 #memory,
 #disk,
 #network,
-#bluetooth {
-    padding: 0 9px;
-    background-color: transparent;
-}
-
-/* Contenu révélé d'un drawer : légèrement détaché du module de tête, pour
-   qu'on voie ce qui vient de s'ouvrir. */
-.system-drawer,
-.connect-drawer,
-.audio-drawer,
-.tools-drawer,
-.tray-drawer {
-    background-color: @surface1;
-    border-radius: 8px;
-}
-
-/* ── Largeurs minimales : sans elles, 100% -> 99% -> 9% décale toute la
-      barre à chaque changement de valeur. ── */
-#battery,
-#backlight,
-#cpu,
-#memory,
-#disk {
-    min-width: 46px;
-}
-
-#temperature {
-    min-width: 56px;
-}
-
-#clock.date {
-    min-width: 92px;
-}
-
-#clock.time {
-    min-width: 52px;
-}
-
-#pulseaudio.percentage {
-    min-width: 34px;
-}
-
+#bluetooth,
+#pulseaudio,
+#custom-tray-handle,
+#custom-toggle-info,
+#custom-keybinds,
 #custom-dots {
-    min-width: 20px;
+    background-color: transparent;
+    color: @ink;
+    padding: 0 7px;
+    margin: 0;
+    border-radius: 0;
 }
 
-/* ── Retour au survol : tout module cliquable doit réagir ── */
+/* Un groupe ne porte que la géométrie : son contenu s'affiche par-dessus. */
+#systray,
+#tools,
+#system,
+#connect,
+#audio {
+    padding: 0 1px;
+}
+
+/* ═══ Survol : la pilule apparaît sous le curseur, et nulle part ailleurs ═══ */
 #clock:hover,
 #battery:hover,
 #backlight:hover,
@@ -120,408 +139,375 @@ window#waybar {
 #system:hover,
 #connect:hover,
 #audio:hover,
+#custom-chrome:hover,
+#custom-claude:hover,
+#custom-dnd:hover,
+#custom-power:hover,
+#custom-remote:hover,
+#custom-recorder:hover,
 #custom-updates:hover,
-#systemd-failed-units:hover {
-    background-color: @surface1;
-}
-
-/* ── Disque ── */
-#disk {
-    color: @sapphire;
-}
-
-/* ── Unités systemd en échec (visible seulement en cas de problème) ── */
-#systemd-failed-units {
-    padding: 0 9px;
-    margin: 4px 2px;
-    border-radius: 8px;
-    background-color: @surface0;
-    color: @red;
-    font-weight: bold;
-}
-
-/* ── Mises à jour en attente (masqué quand le système est à jour) ── */
-#custom-updates {
-    padding: 0 9px;
-    margin: 4px 2px;
-    border-radius: 8px;
-    background-color: @surface0;
-    color: @yellow;
-}
-
-#custom-updates.many {
-    color: @peach;
-    font-weight: bold;
-}
-
-/* ── Workspaces ── */
-#workspaces button {
-    padding: 0 6px;
-    color: @subtext0;
-    background: transparent;
-    border-radius: 6px;
-}
-
-#workspaces button.active {
-    color: @base;
-    background-color: @blue;
-}
-
-#workspaces button:hover {
-    background-color: @surface1;
-    color: @text;
-}
-
-/* ── Bouton mode dizaines (+10) ── */
-#custom-ws-tens {
-    padding: 0 8px;
-    margin: 4px 2px;
-    border-radius: 8px;
-    background-color: @surface0;
-    color: @overlay0;
-    font-weight: bold;
-}
-
-#custom-ws-tens.active {
-    color: @base;
-    background-color: @mauve;
-}
-
-#custom-ws-tens:hover {
-    background-color: @surface1;
-    color: @mauve;
-}
-
-#custom-ws-tens.active:hover {
-    background-color: @mauve;
-    color: @base;
-}
-
-/* ── Window title ── */
-#window {
-    color: @subtext0;
-    font-style: italic;
-}
-
-/* ── Clock ── */
-#clock {
-    color: @lavender;
-    font-weight: bold;
-}
-
-/* ── Battery ── */
-#battery {
-    color: @green;
-}
-
-#battery.charging {
-    color: @green;
-}
-
-#battery.warning:not(.charging) {
-    color: @peach;
-}
-
-#battery.critical:not(.charging) {
-    color: @red;
-    animation: blink 1s linear infinite;
-}
-
-@keyframes blink {
-    to { color: @text; }
-}
-
-/* ── CPU ── */
-#cpu {
-    color: @peach;
-}
-
-/* ── Température ── */
-#temperature {
-    color: @yellow;
-}
-
-#temperature.critical {
-    color: @red;
-    animation: blink 1s linear infinite;
-}
-
-/* ── Média (mpris) ── */
-#mpris {
-    color: @green;
-}
-
-#mpris.paused {
-    color: @overlay0;
-    font-style: italic;
-}
-
-/* ── Caféine (idle inhibitor) ── */
-#idle_inhibitor {
-    color: @overlay0;
-    font-size: 15px;
-}
-
-#idle_inhibitor.activated {
-    color: @peach;
-    font-weight: bold;
-}
-
+#custom-ws-tens:hover,
+#power-profiles-daemon:hover,
+#systemd-failed-units:hover,
 #idle_inhibitor:hover {
-    background-color: @surface1;
-    color: @text;
+    background-color: @fill;
+    color: @ink;
 }
 
-/* ── Confidentialité (micro / partage d'écran) ── */
-#privacy {
-    padding: 0 8px;
-    margin: 4px 2px;
-    border-radius: 8px;
-    background-color: @surface0;
+/* Contenu révélé d'un drawer : légèrement plus dense que la pilule de survol,
+   pour qu'on distingue ce qui vient de s'ouvrir de ce qui était déjà là. */
+.system-drawer,
+.connect-drawer,
+.audio-drawer,
+.tools-drawer,
+.tray-drawer {
+    background-color: rgba(255, 255, 255, 0.07);
+    border-radius: 7px;
 }
 
-#privacy-item.screenshare {
-    color: @peach;
-    padding: 0 4px;
+/* ═══ Largeurs minimales ═══
+   Inter est proportionnelle : ses chiffres n'ont pas tous la même chasse, donc
+   « 100% » → « 99% » → « 9% » décalerait toute la barre à chaque rafraîchi.
+   Ces minimums figent la place réservée. Valeurs revues à la baisse par
+   rapport au monospace, plus étroit à taille égale. */
+#battery,
+#backlight,
+#cpu,
+#memory,
+#disk {
+    min-width: 42px;
 }
 
-#privacy-item.audio-in {
-    color: @red;
-    padding: 0 4px;
+#temperature {
+    min-width: 50px;
 }
 
-/* ── Memory ── */
-#memory {
-    color: @mauve;
+#clock.date {
+    min-width: 86px;
 }
 
-/* ── Network ── */
-#network {
-    color: @sapphire;
-}
-
-#network.disconnected {
-    color: @overlay0;
-}
-
-/* ── Bluetooth ── */
-#bluetooth {
-    color: @blue;
-}
-
-/* ── Audio (pilule définie avec les groupes, plus haut) ── */
-#pulseaudio {
-    background-color: transparent;
-    color: @mauve;
-}
-
-#pulseaudio.icon {
-    padding: 0 4px 0 9px;
+#clock.time {
+    min-width: 48px;
 }
 
 #pulseaudio.percentage {
-    padding: 0 9px 0 4px;
+    min-width: 32px;
 }
 
-#pulseaudio.muted {
-    color: @overlay0;
+#custom-dots {
+    min-width: 18px;
 }
 
-/* ── Backlight ── */
-#backlight {
-    color: @peach;
+/* ═══ Workspaces ═══
+   L'actif est marqué par un remplissage neutre et une encre pleine, pas par
+   une pastille colorée : c'est la sélection macOS. Occupé/vide se lisent à
+   l'opacité. */
+#workspaces {
+    padding: 0 2px;
 }
 
-/* ── App launchers ── */
-#custom-chrome {
-    padding: 0 10px;
-    margin: 4px 2px;
-    border-radius: 8px;
-    background-color: @surface0;
-    color: @text;
-    font-size: 15px;
+#workspaces button {
+    padding: 0 8px;
+    margin: 0 1px;
+    min-width: 0;
+    color: @ink3;
+    background-color: transparent;
+    border-radius: 6px;
 }
 
-#custom-chrome:hover {
-    background-color: @surface1;
-    color: @blue;
+/* hyprland/workspaces expose `.empty` (et non `.occupied`) : on stylise donc
+   par la négative — un workspace qui contient quelque chose remonte d'un cran
+   dans la hiérarchie d'encre. */
+#workspaces button:not(.empty) {
+    color: @ink2;
 }
 
-/* ── Profil énergie (power-profiles-daemon) ── */
+#workspaces button.urgent {
+    color: @sysOrange;
+}
+
+#workspaces button.active {
+    color: #ffffff;
+    background-color: @fillHard;
+}
+
+#workspaces button:hover {
+    background-color: @fill;
+    color: @ink;
+}
+
+#workspaces button.active:hover {
+    background-color: @fillHard;
+    color: #ffffff;
+}
+
+/* ═══ Titre de fenêtre : contexte, donc encre secondaire ═══ */
+#window {
+    color: @ink2;
+}
+
+/* ═══ Horloge : ancre visuelle de la barre, encre pleine ═══ */
+#clock {
+    color: @ink;
+    font-weight: 600;
+}
+
+/* ═══ Icônes seules ═══
+   Un glyphe à la taille du texte paraît plus petit que lui ; +1px rétablit
+   l'équilibre optique. */
+#idle_inhibitor,
+#custom-chrome,
+#custom-dnd,
+#custom-power,
+#custom-remote,
+#custom-toggle-info,
+#custom-keybinds,
+#custom-dots,
 #power-profiles-daemon {
-    padding: 0 9px;
-    margin: 4px 2px;
-    border-radius: 8px;
-    background-color: @surface0;
-    color: @text;
-    font-size: 15px;
+    font-size: 14px;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   ÉTATS — la couleur n'entre en scène qu'ici
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Batterie ── */
+#battery.warning:not(.charging) {
+    color: @sysOrange;
+}
+
+#battery.critical:not(.charging) {
+    color: @sysRed;
+    animation: blink 1.4s ease-in-out infinite;
+}
+
+@keyframes blink {
+    50% { color: @ink; }
+}
+
+/* ── Température ── */
+#temperature.critical {
+    color: @sysRed;
+    animation: blink 1.4s ease-in-out infinite;
+}
+
+/* ── Unités systemd en échec (module masqué tant que tout va bien) ── */
+#systemd-failed-units {
+    color: @sysRed;
+    font-weight: 600;
+}
+
+/* ── Mises à jour en attente : information, pas alerte → encre secondaire.
+      Passe l'orange seulement quand le retard devient significatif. ── */
+#custom-updates {
+    color: @ink2;
+}
+
+#custom-updates.many {
+    color: @ink;
+}
+
+/* ── Réseau / Bluetooth : déconnecté = éteint, pas rouge ── */
+#network.disconnected,
+#bluetooth.disabled,
+#bluetooth.off {
+    color: @ink3;
+}
+
+/* ── Audio ── */
+#pulseaudio.muted {
+    color: @ink3;
+}
+
+#pulseaudio.icon {
+    padding: 0 3px 0 8px;
+}
+
+#pulseaudio.percentage {
+    padding: 0 8px 0 3px;
+}
+
+/* ── Média (mpris) ── */
+#mpris.paused {
+    color: @ink3;
+}
+
+/* ── Caféine : au repos éteint, actif en encre pleine ── */
+#idle_inhibitor {
+    color: @ink3;
+}
+
+#idle_inhibitor.activated {
+    color: @ink;
+}
+
+/* ── Confidentialité : micro ouvert ou écran partagé = vraie alerte ── */
+#privacy-item.screenshare {
+    color: @sysOrange;
+    padding: 0 3px;
+}
+
+#privacy-item.audio-in {
+    color: @sysRed;
+    padding: 0 3px;
+}
+
+/* ── Profil énergie : seul l'écart au profil équilibré se signale ── */
 #power-profiles-daemon.performance {
-    color: @peach;
+    color: @sysOrange;
 }
 
 #power-profiles-daemon.power-saver {
-    color: @green;
+    color: @ink2;
 }
 
-#power-profiles-daemon:hover {
-    background-color: @surface1;
-}
-
-/* ── Poignée du tray (déplie les icônes d'applications au survol) ── */
+/* ── Poignée du tray : discrète, se révèle au survol du groupe ── */
 #custom-tray-handle {
-    padding: 0 10px;
-    background-color: transparent;
-    color: @overlay0;
+    color: @ink3;
 }
 
 #systray:hover #custom-tray-handle {
-    color: @text;
+    color: @ink;
 }
 
-/* ── Outils : œil (cacher/afficher), raccourcis, overflow (⋮) ── */
+/* ── Outils (œil, raccourcis, débordement) ── */
 #custom-toggle-info,
-#custom-keybinds,
-#custom-dots {
-    padding: 0 10px;
-    background-color: transparent;
-    color: @subtext0;
-    font-size: 15px;
+#custom-keybinds {
+    color: @ink2;
 }
 
 #custom-toggle-info:hover,
 #custom-keybinds:hover,
 #custom-dots:hover {
-    color: @text;
+    color: @ink;
 }
 
-/* Des modules ont été repliés faute de place : le « ⋮ » porte le compteur. */
+/* Le « ⋮ » porte le compteur des modules repliés faute de place. */
 #custom-dots {
-    color: @overlay0;
+    color: @ink3;
 }
 
 #tools #custom-dots {
-    font-weight: bold;
+    font-weight: 600;
 }
 
-/* ── Remote mode ── */
+/* ── Bouton mode dizaines (+10) : bascule, donc traité comme une sélection ── */
+#custom-ws-tens {
+    color: @ink3;
+    font-weight: 600;
+}
+
+#custom-ws-tens.active {
+    color: #ffffff;
+    background-color: @fillHard;
+}
+
+#custom-ws-tens.active:hover {
+    background-color: @fillHard;
+    color: #ffffff;
+}
+
+/* ── Mode remote ── */
 #custom-remote {
-    padding: 0 10px;
-    margin: 4px 2px;
-    border-radius: 8px;
-    background-color: @surface0;
-    color: @overlay0;
-    font-size: 15px;
+    color: @ink3;
 }
 
 #custom-remote.active {
-    color: @base;
-    background-color: @red;
-    font-weight: bold;
-}
-
-#custom-remote:hover {
-    background-color: @surface1;
-    color: @green;
+    color: @sysRed;
+    background-color: @fill;
 }
 
 #custom-remote.active:hover {
-    background-color: @red;
-    color: @base;
+    background-color: @fillHard;
+    color: @sysRed;
 }
 
-/* ── Do Not Disturb ── */
-/* ── Sessions Claude Code ── */
-/* La couleur reflète l'état le plus urgent : attente > terminé > en cours. */
+/* ── Sessions Claude Code ──
+   L'encre monte à mesure que la session réclame de l'attention :
+   en cours (terne) → terminée (pleine) → en attente (orange). */
 #custom-claude {
-    padding: 0 10px;
-    margin: 4px 2px;
-    border-radius: 8px;
-    background-color: @surface0;
-    color: @lavender;
+    color: @ink3;
 }
 
-/* Au moins une session a fini : réponse à relire */
 #custom-claude.done {
-    color: @green;
+    color: @ink;
 }
 
-/* Au moins une session attend une action : le plus urgent */
 #custom-claude.waiting {
-    color: @peach;
-    font-weight: bold;
+    color: @sysOrange;
+    font-weight: 600;
 }
 
-#custom-claude:hover {
-    background-color: @surface1;
-}
-
+/* ── Do Not Disturb ──
+   Notifications coupées = état volontaire mais qui se paie : orange.
+   Notifications en attente = badge, signalé par l'encre pleine et le gras. */
 #custom-dnd {
-    padding: 0 10px;
-    margin: 4px 2px;
-    border-radius: 8px;
-    background-color: @surface0;
-    color: @green;
-    font-size: 15px;
+    color: @ink2;
 }
 
-#custom-dnd.active {
-    color: @red;
-    font-weight: bold;
-}
-
-/* Effet « Notif Claude → fenêtre » désactivé : soulignement pêche (rappel) */
-#custom-dnd.claude-off {
-    box-shadow: inset 0 -2px 0 @peach;
-}
-
-/* Présence de notifications dans le centre */
 #custom-dnd.has-notifs {
-    color: @blue;
+    color: @ink;
+    font-weight: 600;
 }
 
+#custom-dnd.active,
 #custom-dnd.active.has-notifs {
-    color: @red;
+    color: @ink;
 }
 
-#custom-dnd:hover {
-    background-color: @surface1;
+/* Effet « Notif Claude → fenêtre » désactivé : soulignement de rappel. */
+#custom-dnd.claude-off {
+    box-shadow: inset 0 -2px 0 @sysBlue;
 }
 
-/* ── Power ── */
+/* ── Enregistrement d'écran (masqué hors enregistrement) ── */
+#custom-recorder {
+    color: @sysRed;
+    font-weight: 600;
+    animation: recording-pulse 2s ease-in-out infinite;
+}
+
+@keyframes recording-pulse {
+    50% { color: @sysOrange; }
+}
+
+/* ── Extinction : neutre au repos, rouge sous le curseur seulement.
+      Une action destructive n'a pas à crier tant qu'on ne la vise pas. ── */
 #custom-power {
-    padding: 0 12px;
-    margin: 4px 6px 4px 2px;
-    border-radius: 8px;
-    background-color: @surface0;
-    color: @red;
-    font-size: 15px;
+    color: @ink2;
+    margin-right: 5px;
 }
 
 #custom-power:hover {
-    background-color: @surface1;
+    background-color: rgba(255, 69, 58, 0.20);
+    color: @sysRed;
 }
 
-/* ── Tray ── */
+/* ── Tray système ── */
 #tray {
     background-color: transparent;
 }
 
-/* ── Mode discret : barre masquée, seul l'œil flotte sur le côté ── */
+#tray menu {
+    background-color: rgba(38, 38, 40, 0.98);
+    color: @ink;
+    border-radius: 8px;
+}
+
+/* ═══ Mode discret : barre effacée, seul l'œil subsiste sur le côté ═══ */
 window#waybar.stealth {
     background-color: transparent;
+    box-shadow: none;
 }
 
 window#waybar.stealth #custom-toggle-info {
     background-color: transparent;
-    color: @overlay0;
-    opacity: 0.5;
+    color: @ink3;
+    opacity: 0.45;
     padding: 0 12px;
-    font-size: 15px;
 }
 
 window#waybar.stealth #custom-toggle-info:hover {
-    color: @text;
+    color: @ink;
     opacity: 1;
 }

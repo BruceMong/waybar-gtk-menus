@@ -59,8 +59,8 @@ button.tile {
     border-radius: 10px;
 }
 .tile-icon { font-size: 24px; }
-.tile-name { font-size: 12px; color: #a6adc8; margin-top: 4px; }
-.empty { color: #6c7086; font-size: 13px; margin: 8px 0; }
+.tile-name { font-size: 12px; color: #9a9aa2; margin-top: 4px; }
+.empty { color: #68686f; font-size: 13px; margin: 8px 0; }
 """
 
 

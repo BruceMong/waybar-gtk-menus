@@ -96,45 +96,62 @@ def apply():
     subprocess.run(["pkill", "-SIGUSR2", "waybar"], check=False)
 
 
-CSS = b"""
-window { background-color: #1e1e2e; }
-.title { font-size: 15px; font-weight: bold; color: #cdd6f4; margin: 4px 2px 10px 2px; }
+CSS = """
+/* Même pile que la barre : Inter (ou Adwaita Sans, son dérivé déjà présent)
+   pour le texte, Nerd Font en queue pour les glyphes. Sans cette règle la
+   fenêtre hérite du gtk-font-name système, ici une monospace. */
+window, label, button, entry, switch, scale, list, row {
+    font-family: "Inter", "Adwaita Sans", "SF Pro Text",
+                 "JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font",
+                 "Symbols Nerd Font", "Noto Sans Symbols 2";
+}
+window { background-color: rgba(30, 30, 32, 0.72); border-radius: 12px; }
+.title { font-size: 15px; font-weight: bold; color: #ebebf0; margin: 4px 2px 10px 2px; }
 .mod-row { padding: 7px 4px; }
-.mod-name { font-size: 14px; color: #cdd6f4; }
+.mod-name { font-size: 14px; color: #ebebf0; }
 switch { min-width: 48px; min-height: 26px; }
 .close-btn {
     background: transparent;
     border: none;
-    color: #cdd6f4;
+    color: #ebebf0;
     font-size: 18px;
     font-weight: bold;
     padding: 0 8px;
     min-height: 24px;
     min-width: 24px;
 }
-.close-btn:hover { background-color: #f38ba8; color: #1e1e2e; border-radius: 6px; }
+.close-btn:hover { background-color: rgba(255, 69, 58, 0.18); color: #ff453a; border-radius: 6px; }
 .quick-btn {
     font-size: 13px;
     padding: 8px;
     border-radius: 8px;
-    background-color: #313244;
-    color: #cdd6f4;
+    background-color: rgba(255, 255, 255, 0.09);
+    color: #ebebf0;
     border: none;
 }
-.quick-btn:hover { background-color: #45475a; }
-.quick-btn.hide:hover { background-color: #f9e2af; color: #1e1e2e; }
-.quick-btn.show:hover { background-color: #a6e3a1; color: #1e1e2e; }
-.quick-btn.stealth:hover { background-color: #89b4fa; color: #1e1e2e; }
+.quick-btn:hover { background-color: rgba(255, 255, 255, 0.16); }
+.quick-btn.hide:hover { background-color: rgba(255, 214, 10, 0.22); color: #ffd60a; }
+.quick-btn.show:hover { background-color: rgba(50, 215, 75, 0.22); color: #32d74b; }
+.quick-btn.stealth:hover { background-color: rgba(10, 132, 255, 0.22); color: #0a84ff; }
 switch:focus, button:focus, .mod-row:focus, *:focus {
-    outline: 2px solid #fab387;
+    outline: 2px solid rgba(10, 132, 255, 0.75);
     outline-offset: -2px;
 }
-"""
+""".encode()
 
 
 class ModuleWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app, title="Modules waybar")
+
+        # Fenêtre Hyprland ordinaire (pas un layer) : c'est la windowrule
+        # waybar-modules-float qui la place. Le visual RGBA lui donne un fond
+        # translucide, qu'Hyprland floute alors comme n'importe quelle
+        # surface non opaque — même matériau que les popups de la barre.
+        _visual = Gdk.Screen.get_default().get_rgba_visual()
+        if _visual is not None:
+            self.set_visual(_visual)
+
         self.set_default_size(300, 720)
 
         self.switches = []  # (switch, [ids])
