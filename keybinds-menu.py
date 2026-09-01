@@ -208,16 +208,24 @@ def parse_binds():
         super_var = next((name for name, value in variables.items()
                           if value.strip().upper() in ("SUPER", "MOD4")), None)
         section = ""
+        in_comment_block = False
         for lineno, line in enumerate(lines):
             stripped = line.strip()
             # Un commentaire seul sert de titre de section pour les binds
             # suivants. On écarte les séparateurs, les URL et les phrases
             # trop longues, qui ne font pas des titres lisibles.
+            #
+            # Seule la PREMIÈRE ligne d'un bloc de commentaires contigu est
+            # retenue : les suivantes prolongent la phrase et donnent des
+            # titres absurdes (« côté écran, d'où la lettre voisine. »).
             if stripped.startswith("#"):
-                text = stripped.strip("#").strip()
-                if text and not text.startswith("-") and "http" not in text:
-                    section = shorten_section(text)
+                if not in_comment_block:
+                    text = stripped.strip("#").strip()
+                    if text and not text.startswith("-") and "http" not in text:
+                        section = shorten_section(text)
+                in_comment_block = True
                 continue
+            in_comment_block = False
             if not stripped:
                 continue
             m = BIND_RE.match(line)
