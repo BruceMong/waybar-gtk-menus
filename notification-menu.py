@@ -2,11 +2,10 @@
 """Popup Notifications pour Waybar (style menu luminosité).
 
 Réglages de notification : Ne pas déranger (switch + minuteries 30 min / 1 h),
-son des notifications, effet « Notif Claude → fenêtre », et passerelle vers le
-centre swaync.
+son des notifications, effet « Notif Claude → fenêtre ».
 
-Le « Tout effacer » vit dans le centre swaync et pas ici : y effacer la pile
-sans la voir revient à jeter à l'aveugle.
+La pile de notifications vit dans le centre swaync (clic gauche sur la cloche)
+et pas ici : ce popup ne fait que les réglages.
 """
 import os
 import signal
@@ -33,23 +32,18 @@ class NotificationPopup(LayerPopup):
 
         # -- Ne pas déranger --
         self.box.pack_start(self._switch_row(
-            "󰂚  Ne pas déranger", self._dnd_state(),
+            "  Ne pas déranger", self._dnd_state(),
             self._on_dnd_toggled, store="switch_dnd"), False, False, 0)
 
         # -- Minuteries Ne pas déranger --
         row = Gtk.Box(spacing=8, homogeneous=True)
-        btn30 = Gtk.Button(label="󰒲  30 min")
+        btn30 = Gtk.Button(label="  30 min")
         btn30.connect("clicked", lambda *_: self._snooze(1800, "30 min"))
-        btn1h = Gtk.Button(label="󰒲  1 h")
+        btn1h = Gtk.Button(label="  1 h")
         btn1h.connect("clicked", lambda *_: self._snooze(3600, "1 h"))
         row.pack_start(btn30, True, True, 0)
         row.pack_start(btn1h, True, True, 0)
         self.box.pack_start(row, False, False, 0)
-
-        # -- Actions swaync --
-        btn_center = Gtk.Button(label="󰂚  Ouvrir le centre de notifications")
-        btn_center.connect("clicked", self._on_center)
-        self.box.pack_start(btn_center, False, False, 0)
 
         # -- Son des notifications --
         self.box.pack_start(self._switch_row(
@@ -112,11 +106,6 @@ class NotificationPopup(LayerPopup):
             stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
         with open(SNOOZE_PID, "w") as f:
             f.write(str(proc.pid))
-        self.close()
-
-    def _on_center(self, _btn):
-        subprocess.Popen(["swaync-client", "--toggle-panel"],
-                         stdout=DEVNULL, stderr=DEVNULL)
         self.close()
 
     def _on_sound_toggled(self, switch, _param):

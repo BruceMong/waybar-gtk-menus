@@ -10,14 +10,16 @@
 # Note : dans un groupe drawer, seul le premier module occupe de la place —
 # cacher les suivants ne libère rien. Les étapes ci-dessous cachent donc
 # les groupes entiers ou leur module de tête.
-hyprland/window
 mpris
 # pulseaudio#percentage : NE PAS replier. C'est le 2e module du
 # drawer group/audio, donc le cacher ne libere aucune place (cf. note
 # ci-dessus), et c'est lui qui porte le on-click du menu son.
-clock#date
 backlight
 power-profiles-daemon
+clock#date
 custom/chrome
 idle_inhibitor
 cpu temperature memory disk
+# Le nom de l'application est l'ancre de la menu bar (avec la pomme et
+# l'heure) : il ne se replie qu'en tout dernier recours.
+hyprland/window

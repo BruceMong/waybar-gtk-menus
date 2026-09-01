@@ -200,6 +200,15 @@ class UpdatesPopup(LayerPopup):
         lbl = Gtk.Label(xalign=0)
         lbl.set_markup(self._detail_markup(system, apps, deps, aur))
         lbl.set_selectable(True)
+        # Sans repli, les ~200 noms de paquets joints par ", " forment une
+        # ligne unique de plusieurs dizaines de milliers de pixels. Le
+        # ScrolledWindow est en NEVER à l'horizontale : il propage cette
+        # largeur à la fenêtre, Cairo refuse une surface aussi large et GDK
+        # segfaute au premier dessin. max_width_chars est indispensable —
+        # sans lui un label replié réclame quand même sa largeur d'une ligne.
+        lbl.set_line_wrap(True)
+        lbl.set_line_wrap_mode(2)   # Pango.WrapMode.WORD_CHAR
+        lbl.set_max_width_chars(42)
         scroll.add(lbl)
         exp.add(scroll)
         self.box.pack_start(exp, False, False, 0)

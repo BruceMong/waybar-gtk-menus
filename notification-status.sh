@@ -14,11 +14,11 @@ count="$(swaync-client -c 2>/dev/null)"
 classes=()
 
 if [ "$dnd" = "true" ]; then
-    icon="󰂛"
+    icon=""
     classes+=("active")
     dnd_txt="Notifications : Ne pas déranger"
 else
-    icon="󰂚"
+    icon=""
     classes+=("inactive")
     dnd_txt="Notifications : actives"
 fi
@@ -39,7 +39,7 @@ fi
 
 [ -f "$SOUND_FLAG" ] && sound_txt="Son : activé" || sound_txt="Son : coupé"
 
-tooltip="$(printf '%s\n%s\n%s\nclic : menu notifications' \
+tooltip="$(printf '%s\n%s\n%s\nclic : centre de notifications · clic droit : réglages' \
     "$dnd_txt" "$claude_txt" "$sound_txt")"
 
 class_json="$(printf '%s\n' "${classes[@]}" | jq -R . | jq -cs .)"

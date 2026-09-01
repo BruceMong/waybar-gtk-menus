@@ -76,4 +76,4 @@ print(json.dumps({
     "class": sys.argv[3],
     "alt": sys.argv[3],
 }, ensure_ascii=False))
-' "󰚰 $total" "$tooltip" "$class"
+' " $total" "$tooltip" "$class"

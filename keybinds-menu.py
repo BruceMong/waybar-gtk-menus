@@ -545,7 +545,6 @@ class KeybindsPopup(LayerPopup):
 
     def run(self):
         self.connect("destroy", Gtk.main_quit)
-        self._dismiss.show_all()
         self.show_all()
         self.search.grab_focus()
         Gtk.main()

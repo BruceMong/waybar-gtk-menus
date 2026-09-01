@@ -15,7 +15,12 @@ if OLD=$(cat "$PIDFILE" 2>/dev/null) && [ -n "$OLD" ] && [ "$OLD" != "$$" ]; the
     kill "$OLD" 2>/dev/null
 fi
 echo $$ > "$PIDFILE"
-trap 'rm -f "$PIDFILE"; exit 0' TERM INT HUP
+# Le pidfile n'est effacé que s'il porte encore NOTRE pid : l'ancienne
+# instance, bloquée dans son `sleep 1`, ne traite son signal qu'après
+# que la nouvelle y a écrit le sien — un `rm` inconditionnel effacerait
+# donc le pid du remplaçant, et le lancement suivant ne tuerait plus
+# rien : deux boucles écriraient dans le même module.
+trap '[ "$(cat "$PIDFILE" 2>/dev/null)" = "$$" ] && rm -f "$PIDFILE"; exit 0' TERM INT HUP
 
 json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
@@ -29,7 +34,7 @@ while true; do
         else
             dur=$(printf '%02d:%02d' $((secs / 60)) $((secs % 60)))
         fi
-        printf '{"text":"󰑊 %s","class":"recording","tooltip":"Enregistrement en cours → %s\\nclic : arrêter (ou SUPER+SHIFT+R)"}\n' \
+        printf '{"text":" %s","class":"recording","tooltip":"Enregistrement en cours → %s\\nclic : arrêter (ou SUPER+SHIFT+R)"}\n' \
             "$dur" "$(json_escape "${file##*/}")"
     else
         printf '{"text":"","class":"idle","tooltip":""}\n'

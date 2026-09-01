@@ -4,9 +4,17 @@
 Fournit une fenêtre GTK3 sur le layer overlay (gtk-layer-shell), ancrée en
 haut à droite, avec :
   - fermeture par Échap / Entrée / clic en dehors / bouton croix (✕)
+    Le clic en dehors n'est pas intercepté : il atteint la fenêtre visée
+    (voir detach_pointer_focus).
   - matériau translucide flouté par le compositeur, palette système macOS
   - un en-tête (titre + croix) déjà construit dans self.box
 """
+
+import atexit
+import os
+import re
+import signal
+import subprocess
 
 import gi
 
@@ -23,6 +31,7 @@ CSS = """
    à trahir l'ensemble. */
 window, label, button, entry, switch, scale, list, row, popover, menu {
     font-family: "Inter", "Adwaita Sans", "SF Pro Text",
+                 "Material Symbols Rounded",
                  "JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font",
                  "Symbols Nerd Font", "Noto Sans Symbols 2";
 }
@@ -97,6 +106,21 @@ button:active { background-color: rgba(255, 255, 255, 0.22); }
 button.accent { background-color: #0a84ff; color: #ffffff; }
 button.accent:hover { background-color: #409cff; }
 
+/* Action en cours qu'on vient interrompre (arrêter un enregistrement) : rouge
+   système, même logique d'encre blanche que le bouton accentué. */
+button.danger { background-color: #ff453a; color: #ffffff; }
+button.danger:hover { background-color: #ff6961; }
+
+/* ── Champs de saisie ── */
+entry {
+    background-color: rgba(255, 255, 255, 0.09);
+    color: #ebebf0;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 10px;
+}
+entry:focus { outline: 2px solid rgba(10, 132, 255, 0.75); outline-offset: -2px; }
+
 button.close-btn {
     color: #9a9aa2;
     background: none;
@@ -129,6 +153,144 @@ checkbutton:focus,
 """.encode()
 
 
+HYPR_CONF = os.path.expanduser("~/.config/hypr/hyprland.conf")
+# Liste des popups qui ont détaché le focus du curseur (un PID par ligne).
+# Nécessaire pour ne rétablir le réglage qu'au dernier popup fermé.
+FOCUS_LOCK = os.path.join(
+    os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "waybar-popup-focus")
+
+
+def _hyprctl(*args):
+    """hyprctl silencieux : hors Hyprland, on veut juste ne rien casser."""
+    try:
+        return subprocess.run(["hyprctl", *args], timeout=2, check=False,
+                              capture_output=True, text=True)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _config_follow_mouse():
+    """Valeur de input:follow_mouse telle qu'écrite dans hyprland.conf.
+
+    C'est elle qu'on rétablit, pas la valeur lue à chaud : si un popup a été
+    tué avant d'avoir pu faire le ménage, le réglage courant vaut encore 2 et
+    le popup suivant le figerait définitivement.
+    """
+    try:
+        with open(HYPR_CONF, encoding="utf-8") as fh:
+            found = re.findall(r"^\s*follow_mouse\s*=\s*(\d+)", fh.read(),
+                               re.M)
+        return int(found[-1]) if found else 1
+    except (OSError, ValueError):
+        return 1
+
+
+def _proc_start(pid):
+    """Date de démarrage du processus (champ 22 de /proc/<pid>/stat), ou None.
+
+    Le noyau recycle les PIDs : seul le couple (pid, date de démarrage)
+    identifie un processus de façon stable. Le nom de la commande, entre
+    parenthèses, peut contenir des espaces — d'où le découpage après la
+    DERNIÈRE parenthèse fermante.
+    """
+    try:
+        with open("/proc/%d/stat" % pid, encoding="utf-8") as fh:
+            data = fh.read()
+        return int(data[data.rindex(")") + 2:].split()[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _lock_pids():
+    """Popups encore vivants inscrits dans le verrou, en (pid, démarrage).
+
+    Une entrée dont le PID n'existe plus — ou existe mais appartient désormais
+    à un autre processus, le PID ayant été recyclé — est purgée. Sans cette
+    seconde vérification, un popup tué sans avoir pu faire son ménage laisse
+    une entrée qui finit par « revivre » sur un processus quelconque : plus
+    aucun popup ne rétablit alors follow_mouse, et la session reste en mode 2
+    sans que rien ne puisse la réparer.
+    """
+    entries = []
+    try:
+        with open(FOCUS_LOCK, encoding="utf-8") as fh:
+            for line in fh.read().splitlines():
+                fields = line.split()
+                if len(fields) != 2:
+                    continue  # format d'une version antérieure : périmé
+                entries.append((int(fields[0]), int(fields[1])))
+    except (OSError, ValueError):
+        return []
+    return [(pid, start) for pid, start in entries
+            if _proc_start(pid) == start]
+
+
+def _write_lock(entries):
+    try:
+        with open(FOCUS_LOCK, "w", encoding="utf-8") as fh:
+            fh.write("\n".join("%d %d" % e for e in entries))
+    except OSError:
+        pass
+
+
+_focus_detached = False
+
+
+def detach_pointer_focus():
+    """Détache le focus clavier du survol de la souris (follow_mouse = 2).
+
+    Un popup se ferme quand il perd le focus clavier. Avec le réglage habituel
+    (follow_mouse = 1), le simple passage du curseur au-dessus d'une fenêtre le
+    lui volerait : le menu se fermerait au moindre mouvement. En mode 2, seul
+    un vrai clic déplace le focus — précisément l'événement sur lequel on veut
+    fermer, et ce clic-là part bien à la fenêtre visée puisque plus aucune
+    surface ne l'intercepte.
+
+    Le réglage d'origine est rétabli par restore_pointer_focus(), une fois le
+    dernier popup fermé.
+    """
+    global _focus_detached
+    if _focus_detached:
+        return
+    _focus_detached = True
+    _write_lock(_lock_pids() + [(os.getpid(), _proc_start(os.getpid()))])
+    _hyprctl("keyword", "input:follow_mouse", "2")
+    atexit.register(restore_pointer_focus)
+    # Un SIGTERM (fin de session, pkill) doit lui aussi rendre le réglage :
+    # atexit ne s'exécuterait pas. GLib.unix_signal_add fait passer le signal
+    # par la boucle principale, contrairement à signal.signal qui resterait en
+    # attente tant que GTK ne rend pas la main.
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        GLib.unix_signal_add(GLib.PRIORITY_HIGH, sig, _on_term)
+
+
+def _on_term(*_):
+    restore_pointer_focus()
+    Gtk.main_quit()
+    # Filet : si le signal est arrivé avant le démarrage de la boucle (un menu
+    # comme keybinds met un instant à se construire), main_quit() n'a rien
+    # arrêté et le popup resterait à l'écran. On ne laisse pas traîner.
+    GLib.timeout_add(200, lambda: os._exit(0))
+    return False
+
+
+def restore_pointer_focus():
+    """Rend son réglage follow_mouse à Hyprland, si plus aucun popup n'est là.
+
+    Enchaîner deux menus ferme le premier (il perd le focus au profit du
+    second) alors que le second vient de détacher le focus : le verrou évite
+    que ce premier départ ne rétablisse le réglage sous les pieds du second.
+    """
+    global _focus_detached
+    if not _focus_detached:
+        return
+    _focus_detached = False
+    others = [e for e in _lock_pids() if e[0] != os.getpid()]
+    _write_lock(others)
+    if not others:
+        _hyprctl("keyword", "input:follow_mouse", str(_config_follow_mouse()))
+
+
 def apply_css():
     provider = Gtk.CssProvider()
     provider.load_from_data(CSS)
@@ -149,10 +311,13 @@ class LayerPopup(Gtk.Window):
     def __init__(self, title, width=340, margin_right=150, margin_top=40):
         super().__init__(title=title)
 
-        # Layer overlay (au-dessus de Waybar) + clavier exclusif.
+        # Layer overlay (au-dessus de Waybar), focus clavier à la demande.
+        # Surtout pas EXCLUSIVE : Hyprland réserve alors aussi le *pointeur* au
+        # client du layer, si bien qu'aucun clic n'atteint plus les fenêtres du
+        # dessous tant que le popup est ouvert.
         GtkLayerShell.init_for_window(self)
         GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
-        GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.EXCLUSIVE)
+        GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.ON_DEMAND)
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.RIGHT, True)
         GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, margin_top)
@@ -160,9 +325,8 @@ class LayerPopup(Gtk.Window):
 
         # Namespace dédié : c'est lui que cible le bloc `layerrule`
         # waybar-popup dans hyprland.conf. Sans namespace propre on ne
-        # pourrait viser que « gtk-layer-shell », ce qui engloberait la
-        # fenêtre de fermeture plein écran ci-dessous — et flouterait donc
-        # tout l'écran dès l'ouverture d'un menu.
+        # pourrait viser que « gtk-layer-shell », commun à tous les clients
+        # gtk-layer-shell de la session.
         GtkLayerShell.set_namespace(self, "waybar-popup")
 
         # Visual RGBA : sans lui GTK aplatit l'alpha du fond sur du noir. Le
@@ -176,28 +340,16 @@ class LayerPopup(Gtk.Window):
         self.set_resizable(False)
         self.connect("key-press-event", self._on_key)
 
-        # Dismiss layer : fenêtre plein écran transparente, ferme au clic dehors.
-        self._dismiss = Gtk.Window()
-        GtkLayerShell.init_for_window(self._dismiss)
-        GtkLayerShell.set_layer(self._dismiss, GtkLayerShell.Layer.TOP)
-        for edge in (GtkLayerShell.Edge.TOP, GtkLayerShell.Edge.BOTTOM,
-                     GtkLayerShell.Edge.LEFT, GtkLayerShell.Edge.RIGHT):
-            GtkLayerShell.set_anchor(self._dismiss, edge, True)
-        self._dismiss.set_app_paintable(True)
-        screen = Gdk.Screen.get_default()
-        visual = screen.get_rgba_visual()
-        if visual is not None:
-            self._dismiss.set_visual(visual)
-        self._dismiss.connect(
-            "draw",
-            lambda w, cr: (cr.set_source_rgba(0, 0, 0, 0),
-                           cr.set_operator(1), cr.paint(), False)[-1],
-        )
-        eb = Gtk.EventBox()
-        eb.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
-        eb.connect("button-press-event", lambda *_: (self.close(), True)[1])
-        self._dismiss.add(eb)
-        self.connect("destroy", lambda *_: self._dismiss.destroy())
+        # Fermeture au clic dehors, sans surface de capture. Une fenêtre
+        # transparente plein écran ferait bien l'affaire pour détecter le clic,
+        # mais elle l'avalerait : le bouton visé derrière le popup ne le
+        # recevrait jamais. On ferme donc sur perte du focus clavier, que seul
+        # un clic provoque grâce à detach_pointer_focus().
+        detach_pointer_focus()
+        self._had_focus = False
+        self._close_src = 0
+        self.connect("notify::has-toplevel-focus", self._on_focus_change)
+        self.connect("destroy", lambda *_: restore_pointer_focus())
 
         apply_css()
 
@@ -248,6 +400,27 @@ class LayerPopup(Gtk.Window):
         # Entrée / Tab : laisser GTK activer ou parcourir le widget ciblé.
         return False
 
+    def _on_focus_change(self, *_):
+        if self._close_src:
+            GLib.source_remove(self._close_src)
+            self._close_src = 0
+        if self.props.has_toplevel_focus:
+            self._had_focus = True
+            return
+        # Avant le tout premier focus, rien à fermer : la fenêtre vient d'être
+        # mappée et le compositeur ne lui a pas encore donné le clavier.
+        if not self._had_focus:
+            return
+        # Court sursis : un aller-retour de focus (menu GTK qui s'ouvre, popup
+        # système) ne doit pas passer pour un clic en dehors.
+        self._close_src = GLib.timeout_add(150, self._close_if_unfocused)
+
+    def _close_if_unfocused(self):
+        self._close_src = 0
+        if not self.props.has_toplevel_focus:
+            self.close()
+        return False
+
     def _grab_first_focus(self):
         """Donne le focus au premier élément interactif du contenu.
 
@@ -274,7 +447,6 @@ class LayerPopup(Gtk.Window):
 
     def run(self):
         self.connect("destroy", Gtk.main_quit)
-        self._dismiss.show_all()
         self.show_all()
         self._grab_first_focus()
         Gtk.main()

@@ -52,7 +52,7 @@ class PowerPopup(LayerPopup):
         # -- Mode Remote (interrupteur) --
         row = Gtk.Box(spacing=8)
         lbl = Gtk.Label(xalign=0)
-        lbl.set_markup("<b>󰌘  Mode Remote</b>")
+        lbl.set_markup("<b>  Mode Remote</b>")
         row.pack_start(lbl, True, True, 0)
         self.sw = Gtk.Switch()
         self.sw.set_valign(Gtk.Align.CENTER)

@@ -5,9 +5,9 @@
     "spacing": 2,
     "reload_style_on_change": true,
 
-    "modules-left": ["hyprland/workspaces", "custom/ws-tens", "custom/chrome", "hyprland/window", "mpris"],
-    "modules-center": ["clock#time", "clock#date"],
-    "modules-right": ["custom/recorder", "privacy", "group/systray", "group/tools", "custom/claude", "custom/dnd", "custom/updates", "systemd-failed-units", "group/system", "group/connect", "group/audio", "backlight", "idle_inhibitor", "power-profiles-daemon", "battery", "custom/power"],
+    "modules-left": ["hyprland/workspaces", "custom/ws-tens", "hyprland/window", "custom/chrome", "mpris"],
+    "modules-center": [],
+    "modules-right": ["custom/voice-rec", "custom/recorder", "privacy", "group/systray", "group/tools", "group/status", "group/system", "group/connect", "group/audio", "backlight", "idle_inhibitor", "power-profiles-daemon", "battery", "clock#date", "clock#time", "custom/power"],
 
     "defaults": {
         "clock": {
@@ -49,7 +49,10 @@
         },
         "modules": ["custom/dots", "custom/toggle-info", "custom/keybinds"]
     },
-
+    "group/status": {
+        "orientation": "inherit",
+        "modules": ["custom/claude", "custom/dnd", "custom/updates", "systemd-failed-units"]
+    },
     "group/system": {
         "orientation": "inherit",
         "drawer": {
@@ -86,16 +89,40 @@
     },
 
     "hyprland/window": {
-        "max-length": 25,
+        "format": "{initialClass}",
+        "rewrite": {
+            "google-chrome": "Google Chrome",
+            "chrome-notes\\.example\\.com.*": "Notes",
+            "chrome-(?!notes\\.example\\.com).*": "Chrome",
+            "kitty": "Kitty",
+            "cl-.*": "Claude",
+            "md\\.obsidian\\.Obsidian": "Obsidian",
+            "org\\.mozilla\\.Thunderbird": "Thunderbird",
+            "org\\.mozilla\\.firefox": "Firefox",
+            "com\\.rtosta\\.zapzap": "ZapZap",
+            "com\\.github\\.fabiocolacio\\.marker": "Marker",
+            "org\\.keepassxc\\.KeePassXC": "KeePassXC",
+            "org\\.gnome\\.Nautilus": "Fichiers",
+            "[Tt]hunar": "Fichiers",
+            "[Cc]ode|[Cc]odium": "Visual Studio Code",
+            "[Ss]lack": "Slack",
+            "[Vv]esktop|[Dd]iscord": "Discord",
+            "[Ss]potify": "Spotify",
+            "com\\.obsproject\\.Studio|[Oo][Bb][Ss]": "OBS",
+            "org\\.qbittorrent\\.qBittorrent|[Qq][Bb]ittorrent": "qBittorrent",
+            "org\\.pulseaudio\\.pavucontrol|[Pp]avucontrol": "Son",
+            "": "Bureau"
+        },
+        "max-length": 28,
         "separate-outputs": true
     },
 
     "clock#time": {
-        "format": "󰥔 {:%H:%M}"
+        "format": "{:%H:%M}"
     },
 
     "clock#date": {
-        "format": "󰃭 {:L%a %d %b}"
+        "format": "{:L%a %d %b}"
     },
 
     "battery": {
@@ -104,11 +131,13 @@
             "warning": 30,
             "critical": 15
         },
-        "format": "{icon} {capacity}%",
-        "format-charging": "󰂄 {capacity}%",
-        "format-plugged": "󰚥 {capacity}%",
-        "format-icons": ["󰁺", "󰁼", "󰁾", "󰂀", "󰂂"],
-        "tooltip-format": "{timeTo}\nPuissance : {power:.1f} W",
+        "format": "{icon}",
+        "format-warning": "{icon} {capacity}%",
+        "format-critical": "{icon} {capacity}%",
+        "format-charging": " {capacity}%",
+        "format-plugged": "",
+        "format-icons": ["", "", "", "", ""],
+        "tooltip-format": "{capacity} % — {timeTo}\nPuissance : {power:.1f} W",
         "on-click": "~/.config/waybar/battery-menu.py"
     },
 
@@ -117,8 +146,11 @@
         "hwmon-path-abs": "auto",
         "input-filename": "temp1_input",
         "critical-threshold": 85,
+        "states": {
+            "hot": 75
+        },
         "format": "{icon} {temperatureC}°C",
-        "format-icons": ["󱃃", "󰔏", "󱃂"],
+        "format-icons": ["", "", ""],
         "tooltip-format": "CPU (Tctl) : {temperatureC}°C"
     },
 
@@ -129,15 +161,15 @@
         "max-length": 28,
         "dynamic-order": ["title", "artist"],
         "player-icons": {
-            "default": "󰝚",
+            "default": "",
             "chromium": "󰊯",
             "firefox": "󰈹",
             "spotify": "󰓇"
         },
         "status-icons": {
-            "paused": "󰏤",
-            "playing": "󰐊",
-            "stopped": "󰓛"
+            "paused": "",
+            "playing": "",
+            "stopped": ""
         },
         "on-click-right": "~/.config/waybar/mpris-pip.sh",
         "tooltip-format": "{player} : {title} — {artist}\nclic G : lecture/pause | clic D : PiP | molette : piste suiv./préc."
@@ -156,10 +188,10 @@
     "power-profiles-daemon": {
         "format": "{icon}",
         "format-icons": {
-            "default": "󱐋",
-            "performance": "󱐋",
-            "balanced": "󰗑",
-            "power-saver": "󰌪"
+            "default": "",
+            "performance": "",
+            "balanced": "",
+            "power-saver": ""
         },
         "tooltip-format": "Profil énergie : {profile}\nclic : basculer (perf / équilibré / éco)"
     },
@@ -167,8 +199,8 @@
     "idle_inhibitor": {
         "format": "{icon}",
         "format-icons": {
-            "activated": "󰅶",
-            "deactivated": "󰾪"
+            "activated": "",
+            "deactivated": ""
         },
         "tooltip-format-activated": "Caféine ACTIVE : veille et verrouillage bloqués",
         "tooltip-format-deactivated": "Caféine inactive — clic pour bloquer la veille"
@@ -176,14 +208,20 @@
 
     "cpu": {
         "interval": 5,
-        "format": "󰻠 {usage}%",
-        "tooltip-format": "{avg_frequency} GHz",
+        "states": {
+            "high": 70,
+            "critical": 90
+        },
+        "format": "",
+        "format-high": " {usage}%",
+        "format-critical": " {usage}%",
+        "tooltip-format": "Charge : {usage} %\n{avg_frequency} GHz",
         "on-click": "~/.config/waybar/system-monitor.sh"
     },
 
     "memory": {
         "interval": 5,
-        "format": "󰍛 {percentage}%",
+        "format": " {percentage}%",
         "tooltip-format": "{used:0.1f} Go / {total:0.1f} Go",
         "on-click": "~/.config/waybar/system-monitor.sh",
         "on-click-right": "~/.config/waybar/memory-details.sh"
@@ -192,13 +230,13 @@
     "disk": {
         "interval": 120,
         "path": "/",
-        "format": "󰋊 {percentage_used}%",
+        "format": " {percentage_used}%",
         "tooltip-format": "{used} / {total} utilisés — {free} libres"
     },
 
     "systemd-failed-units": {
         "hide-on-ok": true,
-        "format": "󰀪 {nr_failed}",
+        "format": " {nr_failed}",
         "format-ok": "",
         "system": true,
         "user": true,
@@ -208,9 +246,9 @@
     },
 
     "network": {
-        "format-wifi": "󰖩",
-        "format-ethernet": "󰈀",
-        "format-disconnected": "󰖪",
+        "format-wifi": "",
+        "format-ethernet": "",
+        "format-disconnected": "",
         "tooltip-format-wifi": "{essid} — {signalStrength}% | {ipaddr}",
         "tooltip-format-ethernet": "{ifname} | {ipaddr}",
         "tooltip-format-disconnected": "Déconnecté",
@@ -219,8 +257,8 @@
 
     "bluetooth": {
         "format": "",
-        "format-connected": "󰂱 {device_alias:.10}",
-        "format-connected-battery": "󰂱 {device_alias:.10} {device_battery_percentage}%",
+        "format-connected": " {device_alias:.10}",
+        "format-connected-battery": " {device_alias:.10} {device_battery_percentage}%",
         "format-disabled": "",
         "on-click": "blueman-manager",
         "tooltip-format-connected": "{device_enumerate}",
@@ -231,9 +269,9 @@
 
     "pulseaudio#icon": {
         "format": "{icon}",
-        "format-muted": "󰝟",
+        "format-muted": "",
         "format-icons": {
-            "default": ["󰕿", "󰖀", "󰕾"]
+            "default": ["", "", ""]
         },
         "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
         "on-click-right": "~/.config/waybar/sound-menu.py",
@@ -250,8 +288,9 @@
     },
 
     "backlight": {
-        "format": "{icon} {percent}%",
-        "format-icons": ["󰃞", "󰃟", "󰃠"],
+        "format": "{icon}",
+        "tooltip-format": "Luminosité : {percent} %",
+        "format-icons": [""],
         "on-scroll-up": "brightnessctl set +5%",
         "on-scroll-down": "brightnessctl set 5%-",
         "on-click": "~/.config/waybar/brightness-menu.py"
@@ -263,7 +302,7 @@
     },
 
     "custom/tray-handle": {
-        "format": "󰅁",
+        "format": "",
         "tooltip": "Icônes d'applications (survoler pour déplier)"
     },
 
@@ -284,7 +323,7 @@
 
     "custom/remote": {
         "format": "{}",
-        "exec": "[ -f /tmp/remote-mode-active ] && echo '{\"text\": \"󰌘\", \"class\": \"active\"}' || echo '{\"text\": \"󰌙\", \"class\": \"inactive\"}'",
+        "exec": "[ -f /tmp/remote-mode-active ] && echo '{\"text\": \"\", \"class\": \"active\"}' || echo '{\"text\": \"\", \"class\": \"inactive\"}'",
         "return-type": "json",
         "interval": "once",
         "signal": 8,
@@ -300,20 +339,21 @@
         "on-click": "~/.config/waybar/ws-tens-toggle.sh"
     },
 
+
     "custom/power": {
-        "format": "󰐥",
+        "format": "",
         "tooltip": "Power Menu",
         "on-click": "~/.config/waybar/power-menu.py"
     },
 
     "custom/toggle-info": {
-        "format": "󰈈",
+        "format": "",
         "tooltip": "Modules waybar (cacher / afficher)",
         "on-click": "~/.config/waybar/eye.sh"
     },
 
     "custom/keybinds": {
-        "format": "󰌌",
+        "format": "",
         "tooltip": "Raccourcis clavier (clic : consulter / réassigner)",
         "on-click": "~/.config/waybar/keybinds-menu.py"
     },
@@ -342,13 +382,21 @@
         "restart-interval": 5,
         "on-click": "pkill wf-recorder"
     },
+    "custom/voice-rec": {
+        "format": "{}",
+        "return-type": "json",
+        "exec": "$HOME/.config/waybar/voice-status.sh",
+        "restart-interval": 5,
+        "on-click": "~/.config/waybar/voice-recorder.sh stop",
+        "on-click-right": "~/.config/waybar/voice-recorder.sh dir"
+    },
 
     "custom/dnd": {
         "format": "{}",
         "exec": "$HOME/.config/waybar/notification-status-watch.sh",
         "return-type": "json",
         "restart-interval": 5,
-        "on-click": "~/.config/waybar/notification-menu.py",
+        "on-click": "swaync-client --toggle-panel",
         "on-click-right": "~/.config/waybar/notification-menu.py"
     }
 }

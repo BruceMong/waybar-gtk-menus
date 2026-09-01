@@ -40,7 +40,7 @@ COLORS = {
     "running": "#5e9cff",   # lavender — travaille
     "idle": "#9a9aa2",      # subtext0 — au repos
 }
-ICONS = {"waiting": "󰥔", "done": "󰄬", "running": "󰑮", "idle": "󰒲"}
+ICONS = {"waiting": "", "done": "", "running": "", "idle": ""}
 LABELS = {
     "waiting": "attend une action",
     "done": "terminé",
@@ -265,7 +265,7 @@ class ClaudeMenu(LayerPopup):
         ws_part = (f"   <span foreground='{FAINT}' size='small'>ws {esc(ws)}</span>"
                    if ws else "")
         top.set_markup(
-            f"<span foreground='{colour}'>{ICONS.get(status, '󰄰')}</span>  "
+            f"<span foreground='{colour}'>{ICONS.get(status, '')}</span>  "
             f"<b>{esc(title)}</b>{ws_part}"
         )
         # Sans max_width_chars, un label ellipsizé réclame quand même sa

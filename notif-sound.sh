@@ -7,7 +7,15 @@
 # Rien ne se produit si Ne pas déranger est actif : aucun popup n'apparaît.
 
 FLAG="$HOME/.config/waybar/notif-sound.enabled"
-SOUND="/usr/share/sounds/freedesktop/stereo/message.oga"
+
+# Pointait sur /usr/share/sounds/freedesktop/stereo/message.oga, qui n'existe
+# pas sur cette machine : le paquet sound-theme-freedesktop n'est pas
+# installé, et /usr/share/sounds est vide. Le son était donc muet même flag
+# activé — paplay échouait en silence, redirigé vers /dev/null.
+#
+# Le fichier est maintenant généré localement (~/.config/sounds/generate.sh) :
+# deux notes montantes, Sol5 puis Do6. Voir ce script pour le raisonnement.
+SOUND="$HOME/.config/sounds/notification.wav"
 CLEAR_PIDFILE="/tmp/notif-clear-button.pid"
 CLEAR_QUEUE="/tmp/notif-clear-button.queue"
 
@@ -21,6 +29,10 @@ if CLEAR_PID=$(cat "$CLEAR_PIDFILE" 2>/dev/null) && [ -n "$CLEAR_PID" ]; then
 fi
 
 # -- 2. Son --
+# pw-play plutôt que paplay : il accepte --volume, ce qui permet de poser le
+# niveau du son système indépendamment du volume de la session. Une
+# notification qui arrive pendant un appel ne doit pas couvrir l'appel.
 [ -f "$FLAG" ] || exit 0
-paplay "$SOUND" 2>/dev/null &
+[ -f "$SOUND" ] || exit 0
+pw-play --volume=0.4 "$SOUND" >/dev/null 2>&1 &
 exit 0

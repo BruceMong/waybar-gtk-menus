@@ -12,6 +12,8 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("GtkLayerShell", "0.1")
 from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
 
+from menu_common import detach_pointer_focus, restore_pointer_focus
+
 TEMP_FILE = os.path.expanduser("~/.cache/hyprsunset-temp")
 KBD_DEVICE = "tpacpi::kbd_backlight"
 KITTY_CONF = os.path.expanduser("~/.config/kitty/kitty.conf")
@@ -53,7 +55,10 @@ class BrightnessPopup(Gtk.Window):
         # Utiliser gtk-layer-shell pour être sur le layer overlay (au-dessus de Waybar)
         GtkLayerShell.init_for_window(self)
         GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
-        GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.EXCLUSIVE)
+        # ON_DEMAND et pas EXCLUSIVE : en exclusif Hyprland réserve aussi le
+        # pointeur au client du layer, et plus aucun clic n'atteint les
+        # fenêtres du dessous tant que le popup est ouvert.
+        GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.ON_DEMAND)
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.RIGHT, True)
         GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, 40)
@@ -73,29 +78,15 @@ class BrightnessPopup(Gtk.Window):
 
         self.connect("key-press-event", self._on_key)
 
-        # Dismiss layer : fenêtre plein écran transparente derrière la popup,
-        # ferme la popup quand on clique en dehors.
-        self._dismiss = Gtk.Window()
-        GtkLayerShell.init_for_window(self._dismiss)
-        GtkLayerShell.set_layer(self._dismiss, GtkLayerShell.Layer.TOP)
-        for edge in (GtkLayerShell.Edge.TOP, GtkLayerShell.Edge.BOTTOM,
-                     GtkLayerShell.Edge.LEFT, GtkLayerShell.Edge.RIGHT):
-            GtkLayerShell.set_anchor(self._dismiss, edge, True)
-        self._dismiss.set_app_paintable(True)
-        screen = Gdk.Screen.get_default()
-        visual = screen.get_rgba_visual()
-        if visual is not None:
-            self._dismiss.set_visual(visual)
-        self._dismiss.connect(
-            "draw",
-            lambda w, cr: (cr.set_source_rgba(0, 0, 0, 0),
-                           cr.set_operator(1), cr.paint(), False)[-1],
-        )
-        eb = Gtk.EventBox()
-        eb.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
-        eb.connect("button-press-event", lambda *_: (self.close(), True)[1])
-        self._dismiss.add(eb)
-        self.connect("destroy", lambda *_: self._dismiss.destroy())
+        # Fermeture au clic dehors sans surface de capture : une fenêtre
+        # transparente plein écran avalerait le clic, que la fenêtre visée
+        # derrière ne recevrait jamais. On ferme sur perte du focus clavier,
+        # que seul un clic provoque grâce à detach_pointer_focus().
+        detach_pointer_focus()
+        self._had_focus = False
+        self._close_src = 0
+        self.connect("notify::has-toplevel-focus", self._on_focus_change)
+        self.connect("destroy", lambda *_: restore_pointer_focus())
 
         self._apply_css()
 
@@ -135,7 +126,7 @@ class BrightnessPopup(Gtk.Window):
 
         # -- Rétroéclairage clavier --
         lbl_kbd = Gtk.Label(xalign=0)
-        lbl_kbd.set_markup("<b>󰌌  Clavier</b>")
+        lbl_kbd.set_markup("<b>  Clavier</b>")
         box.pack_start(lbl_kbd, False, False, 0)
 
         self.scale_kbd = Gtk.Scale.new_with_range(
@@ -259,6 +250,7 @@ class BrightnessPopup(Gtk.Window):
            à trahir l'ensemble. */
         window, label, button, entry, switch, scale, list, row, popover, menu {
             font-family: "Inter", "Adwaita Sans", "SF Pro Text",
+                         "Material Symbols Rounded",
                          "JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font",
                          "Symbols Nerd Font", "Noto Sans Symbols 2";
         }
@@ -338,6 +330,27 @@ class BrightnessPopup(Gtk.Window):
             provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
+
+    def _on_focus_change(self, *_):
+        if self._close_src:
+            GLib.source_remove(self._close_src)
+            self._close_src = 0
+        if self.props.has_toplevel_focus:
+            self._had_focus = True
+            return
+        # Avant le premier focus, la fenêtre vient d'être mappée : rien à
+        # fermer tant que le compositeur ne lui a pas donné le clavier.
+        if not self._had_focus:
+            return
+        # Court sursis : un aller-retour de focus ne doit pas passer pour un
+        # clic en dehors.
+        self._close_src = GLib.timeout_add(150, self._close_if_unfocused)
+
+    def _close_if_unfocused(self):
+        self._close_src = 0
+        if not self.props.has_toplevel_focus:
+            self.close()
+        return False
 
     def _on_key(self, _widget, event):
         kv = event.keyval
@@ -580,8 +593,6 @@ def main():
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     win = BrightnessPopup()
     win.connect("destroy", Gtk.main_quit)
-    # Afficher le dismiss layer en premier pour qu'il soit derrière la popup
-    win._dismiss.show_all()
     win.show_all()
     win.scale_bright.grab_focus()
     Gtk.main()

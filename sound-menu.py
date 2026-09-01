@@ -5,6 +5,7 @@ Actions courantes faites maison :
   - volume haut-parleur (slider) + Muet
   - volume micro (slider) + Micro coupé
   - choix de la sortie audio (si plusieurs périphériques)
+  - enregistrement de réunion (micro + sortie audio, canaux séparés)
 Et un bouton « Réglages avancés » qui ouvre pavucontrol (le menu complet).
 """
 import array
@@ -25,6 +26,12 @@ DEVNULL = subprocess.DEVNULL
 SINK = "@DEFAULT_AUDIO_SINK@"
 SOURCE = "@DEFAULT_AUDIO_SOURCE@"
 VOL_MAX = 150  # plafond cohérent avec le scroll waybar (-l 1.5)
+
+# -- Enregistrement de réunion --
+RECORDER = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "voice-recorder.sh")
+REC_PIDFILE = "/tmp/waybar-voicerec.pid"
+REC_PATHFILE = "/tmp/waybar-voicerec.path"
 
 # -- VU-mètre micro (capture PCM légère via parec) --
 METER_RATE = 8000          # Hz, mono : largement suffisant pour un niveau visuel
@@ -79,6 +86,29 @@ def list_sinks():
             sinks.append((name, desc, name == default))
             name = None
     return sinks
+
+
+def rec_state():
+    """Renvoie (en_cours, secondes_écoulées, nom_du_fichier)."""
+    try:
+        with open(REC_PIDFILE) as f:
+            pid = f.read().strip()
+        secs = int(subprocess.check_output(
+            ["ps", "-o", "etimes=", "-p", pid], text=True, stderr=DEVNULL).strip())
+    except Exception:
+        return False, 0, ""
+    try:
+        with open(REC_PATHFILE) as f:
+            name = os.path.basename(f.read().strip())
+    except OSError:
+        name = ""
+    return True, secs, name
+
+
+def fmt_duration(secs):
+    if secs >= 3600:
+        return "%d:%02d:%02d" % (secs // 3600, secs % 3600 // 60, secs % 60)
+    return "%02d:%02d" % (secs // 60, secs % 60)
 
 
 class SoundPopup(LayerPopup):
@@ -139,6 +169,37 @@ class SoundPopup(LayerPopup):
             GLib.timeout_add(METER_FPS_MS, self._refresh_meter)
             self.connect("destroy", lambda *_: self._stop_meter())
 
+        # -- Enregistrement de réunion --
+        # Placé sous le micro : c'est le même geste mental (« ce que
+        # j'enregistre »), et le VU-mètre juste au-dessus sert de vérification
+        # avant de lancer.
+        self.box.pack_start(Gtk.Separator(), False, False, 0)
+        lbl = Gtk.Label(xalign=0)
+        lbl.set_markup("<b>󰍬  Enregistrer la réunion</b>")
+        self.box.pack_start(lbl, False, False, 0)
+
+        self.rec_hint = Gtk.Label(xalign=0)
+        self.rec_hint.set_line_wrap(True)
+        self.box.pack_start(self.rec_hint, False, False, 0)
+
+        # Libellé facultatif : collé au nom du fichier pour retrouver la
+        # réunion plus tard sans avoir à réécouter.
+        self.rec_entry = Gtk.Entry()
+        self.rec_entry.set_placeholder_text("Nom (facultatif) — ex. point client")
+        self.rec_entry.connect("activate", self._toggle_record)
+        self.box.pack_start(self.rec_entry, False, False, 0)
+
+        self.rec_btn = Gtk.Button()
+        self.rec_btn.connect("clicked", self._toggle_record)
+        self.box.pack_start(self.rec_btn, False, False, 0)
+
+        btn = Gtk.Button(label="󰉋  Ouvrir le dossier des enregistrements")
+        btn.connect("clicked", self._open_rec_dir)
+        self.box.pack_start(btn, False, False, 0)
+
+        self._refresh_record()
+        GLib.timeout_add_seconds(1, self._refresh_record)
+
         # -- Choix de la sortie --
         sinks = list_sinks()
         if len(sinks) > 1:
@@ -147,7 +208,7 @@ class SoundPopup(LayerPopup):
             lbl.set_markup("<b>󰓃  Sortie</b>")
             self.box.pack_start(lbl, False, False, 0)
             for name, desc, is_def in sinks:
-                btn = Gtk.Button(label=("󰄬  " if is_def else "") + desc)
+                btn = Gtk.Button(label=("  " if is_def else "") + desc)
                 if is_def:
                     btn.get_style_context().add_class("accent")
                 btn.connect("clicked", self._select_sink, name)
@@ -219,10 +280,10 @@ class SoundPopup(LayerPopup):
         # Mettre à jour l'accent sur les boutons.
         for btn, bname in self.sink_buttons:
             ctx = btn.get_style_context()
-            label = btn.get_label().lstrip("󰄬 ").strip()
+            label = btn.get_label().lstrip(" ").strip()
             if bname == name:
                 ctx.add_class("accent")
-                btn.set_label("󰄬  " + label)
+                btn.set_label("  " + label)
             else:
                 ctx.remove_class("accent")
                 btn.set_label(label)
@@ -236,6 +297,58 @@ class SoundPopup(LayerPopup):
         # notification swaync), puis ferme le popup.
         fixmic = os.path.expanduser("~/.local/bin/fix-mic")
         subprocess.Popen([fixmic], stdout=DEVNULL, stderr=DEVNULL)
+        self.close()
+
+    # ---- Enregistrement de réunion ----
+
+    def _refresh_record(self):
+        """Reflète l'état réel du process : le popup n'est pas seul à pouvoir
+        lancer ou arrêter (module waybar, raccourci clavier)."""
+        if self.rec_btn.get_parent() is None:          # popup détruit
+            return GLib.SOURCE_REMOVE
+        recording, secs, name = rec_state()
+        ctx = self.rec_btn.get_style_context()
+        if recording:
+            self.rec_btn.set_label("  Arrêter  ·  %s" % fmt_duration(secs))
+            ctx.add_class("danger")
+            ctx.remove_class("accent")
+            self.rec_entry.set_sensitive(False)
+            self.rec_hint.set_markup(
+                "<span size='small' color='#ff453a'>Enregistrement en cours</span>"
+                "<span size='small' color='#9a9aa2'> — %s</span>"
+                % GLib.markup_escape_text(name))
+        else:
+            self.rec_btn.set_label("  Démarrer l'enregistrement")
+            ctx.add_class("accent")
+            ctx.remove_class("danger")
+            self.rec_entry.set_sensitive(True)
+            self.rec_hint.set_markup(
+                "<span size='small' color='#9a9aa2'>Micro et sortie audio sur "
+                "deux canaux séparés — la transcription sait qui parle."
+                "</span>")
+        return GLib.SOURCE_CONTINUE
+
+    def _refresh_record_once(self):
+        self._refresh_record()
+        return GLib.SOURCE_REMOVE
+
+    def _toggle_record(self, _widget):
+        recording, _secs, _name = rec_state()
+        if recording:
+            subprocess.Popen([RECORDER, "stop"], stdout=DEVNULL, stderr=DEVNULL)
+        else:
+            label = self.rec_entry.get_text().strip()
+            subprocess.Popen([RECORDER, "start", label],
+                             stdout=DEVNULL, stderr=DEVNULL)
+        # Le démarrage de ffmpeg prend ~0,6 s (le script vérifie qu'il tient) :
+        # on laisse passer ce délai avant de relire l'état. UN SEUL tir :
+        # _refresh_record renvoie SOURCE_CONTINUE (c'est ce qu'attend le timer
+        # périodique d'une seconde posé au montage), donc le rendre directement
+        # ici installerait un second timer permanent à chaque clic.
+        GLib.timeout_add(900, self._refresh_record_once)
+
+    def _open_rec_dir(self, _btn):
+        subprocess.Popen([RECORDER, "dir"], stdout=DEVNULL, stderr=DEVNULL)
         self.close()
 
     # ---- VU-mètre micro ----

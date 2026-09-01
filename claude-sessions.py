@@ -3,8 +3,8 @@
 
 Résume en un coup d'œil qui travaille, qui attend une action, qui a terminé :
 
-    text    : 󰚩 2/8   -> 2 sessions réclament une action sur 8 ouvertes
-              󰚩 8     -> les 8 tournent, rien à faire
+    text    :  2/8   -> 2 sessions réclament une action sur 8 ouvertes
+               8     -> les 8 tournent, rien à faire
               (vide)  -> aucune session, Waybar masque le module
 
 Le tooltip nomme chaque session par son titre. Les titres viennent des
@@ -24,7 +24,7 @@ from claude_sessions_data import (  # noqa: E402
     NEEDS_ATTENTION, cached_titles, humanize, load_sessions,
 )
 
-ICONS = {"waiting": "󰥔", "done": "󰄬", "running": "󰑮", "idle": "󰒲"}
+ICONS = {"waiting": "", "done": "", "running": "", "idle": ""}
 LABELS = {
     "waiting": "attend une action",
     "done": "terminé",
@@ -45,7 +45,7 @@ def build_tooltip(sessions):
         project = s.get("dir", "")
         suffix = f"  ({project})" if s.get("title") and project else ""
         lines.append(
-            f"{ICONS.get(status, '󰄰')}  {name}{suffix} — "
+            f"{ICONS.get(status, '')}  {name}{suffix} — "
             f"{LABELS.get(status, status)} ({age})"
         )
     lines.append("")
@@ -66,7 +66,7 @@ def main():
                     if s.get("status") in NEEDS_ATTENTION)
     waiting = sum(1 for s in sessions if s.get("status") == "waiting")
 
-    text = f"󰚩 {attention}/{total}" if attention else f"󰚩 {total}"
+    text = f" {attention}/{total}" if attention else f" {total}"
     # La classe la plus urgente l'emporte : attente > terminé > en cours.
     if waiting:
         cls = "waiting"

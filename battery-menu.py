@@ -139,7 +139,7 @@ class BatteryPopup(LayerPopup):
         # -- Délais hypridle --
         self.lbl_lock = self._add_delay("  Verrouillage", LOCK)
         self.lbl_dpms = self._add_delay("󰛧  Extinction écran", DPMS)
-        self.lbl_susp = self._add_delay("󰒲  Mise en veille", SUSPEND)
+        self.lbl_susp = self._add_delay("  Mise en veille", SUSPEND)
 
     # ---- Profil ----
 

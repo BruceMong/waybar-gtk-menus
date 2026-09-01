@@ -102,6 +102,7 @@ CSS = """
    fenêtre hérite du gtk-font-name système, ici une monospace. */
 window, label, button, entry, switch, scale, list, row {
     font-family: "Inter", "Adwaita Sans", "SF Pro Text",
+                 "Material Symbols Rounded",
                  "JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font",
                  "Symbols Nerd Font", "Noto Sans Symbols 2";
 }
@@ -145,12 +146,10 @@ class ModuleWindow(Gtk.ApplicationWindow):
         super().__init__(application=app, title="Modules waybar")
 
         # Fenêtre Hyprland ordinaire (pas un layer) : c'est la windowrule
-        # waybar-modules-float qui la place. Le visual RGBA lui donne un fond
-        # translucide, qu'Hyprland floute alors comme n'importe quelle
-        # surface non opaque — même matériau que les popups de la barre.
-        _visual = Gdk.Screen.get_default().get_rgba_visual()
-        if _visual is not None:
-            self.set_visual(_visual)
+        # waybar-modules-float qui la place. En GTK4 la translucidité vient du
+        # CSS (`window { background-color: rgba(...) }`) : pas de visual RGBA à
+        # poser à la main comme en GTK3. Hyprland floute alors la surface non
+        # opaque — même matériau que les popups de la barre.
 
         self.set_default_size(300, 720)
 

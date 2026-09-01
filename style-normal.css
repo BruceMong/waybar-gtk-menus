@@ -35,31 +35,44 @@
 @define-color sysBlue   #0a84ff;
 
 * {
-    /* Inter en tête (paquet `inter-font`), Adwaita Sans en repli — c'est un
-       dérivé d'Inter, déjà installé, donc le rendu est identique sans rien
-       ajouter. Les Nerd Font restent en queue de pile : Pango pioche le
-       premier fichier qui possède le glyphe, donc les icônes continuent de
-       sortir de JetBrainsMono pendant que le texte sort d'Inter. */
-    font-family: "Inter", "Adwaita Sans", "SF Pro Text",
+    /* SF Pro Text en tête (paquet AUR `otf-san-francisco`) : la police
+       système d'Apple elle-même, plus seulement un dérivé. Inter reste en
+       second — c'est le repli si le paquet AUR disparaît lors d'une
+       réinstallation — et Adwaita Sans derrière elle. Les Nerd Font restent
+       en queue de pile : Pango pioche le premier fichier qui possède le
+       glyphe, donc les icônes continuent de sortir de JetBrainsMono pendant
+       que le texte sort de SF Pro. */
+    font-family: "SF Pro Text", "Inter", "Adwaita Sans",
+                 "Material Symbols Rounded",
                  "JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font",
                  "Symbols Nerd Font", "Noto Sans Symbols 2", "Font Awesome 6 Free";
     font-size: 13px;
     font-weight: 500;
+    /* Chiffres tabulaires : sans eux Inter donne au 1 une chasse plus
+       étroite, et l'horloge se décale d'un pixel à chaque minute — la barre
+       entière respire. GTK3 n'accepte que la forme courte, sans valeur. */
+    font-feature-settings: "tnum";
     border: none;
     border-radius: 0;
     min-height: 0;
     box-shadow: none;
     text-shadow: none;
     transition: background-color 160ms cubic-bezier(0.4, 0, 0.2, 1),
-                color 160ms cubic-bezier(0.4, 0, 0.2, 1);
+                color 160ms cubic-bezier(0.4, 0, 0.2, 1),
+                background-image 160ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ── Le matériau ──
-   #1c1c1e à 55% : la teinte de la menu bar macOS en mode sombre. Le hairline
-   du bas remplace la bordure — une menu bar système ne « flotte » pas, elle
-   se termine sur une ligne d'un pixel. */
+   #1e1e20 à 52% : la teinte de la menu bar macOS en mode sombre, allégée pour
+   laisser passer le fond d'écran sous le flou du compositeur. 42% suffisait sur
+   un fond sombre, mais l'encre passait sous le seuil de lisibilité dès qu'une
+   photo claire arrivait dessous — macOS bascule la barre en clair, faute de
+   quoi il faut de la densité.
+
+   Le hairline du bas remplace la bordure — une menu bar système ne « flotte »
+   pas, elle se termine sur une ligne d'un pixel. */
 window#waybar {
-    background-color: rgba(30, 30, 32, 0.42);
+    background-color: rgba(30, 30, 32, 0.52);
     color: @ink;
     box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.07);
 }
@@ -87,13 +100,14 @@ window#waybar {
 #custom-power,
 #custom-remote,
 #custom-recorder,
+#custom-voice-rec,
 #custom-updates,
 #custom-ws-tens,
 #power-profiles-daemon,
 #systemd-failed-units {
     background-color: transparent;
     color: @ink;
-    padding: 0 8px;
+    padding: 0 5px;
     margin: 3px 1px;
     border-radius: 7px;
 }
@@ -122,10 +136,40 @@ window#waybar {
 /* Un groupe ne porte que la géométrie : son contenu s'affiche par-dessus. */
 #systray,
 #tools,
+#status,
 #system,
 #connect,
 #audio {
     padding: 0 1px;
+}
+
+/* ═══ Rythme ═══
+   Tous les modules étant équidistants, la droite de la barre se lisait comme
+   une suite indifférenciée d'une quinzaine d'éléments. Un espace supplémentaire
+   au début de chaque zone fonctionnelle rétablit des paquets que l'œil peut
+   saisir d'un coup — c'est la seule chose qui sépare les indicateurs d'une
+   menu bar système, qui n'a pourtant ni trait ni cadre entre eux.
+
+   Quatre zones : bac & outils · état & notifications · matériel · extinction.
+   Au-delà, les séparations se neutralisent entre elles.
+
+   Une même valeur pour les quatre : une séparation qui varie ne se lit plus
+   comme une règle. 24px et non 16 parce qu'une respiration doit valoir environ
+   le double de l'écart qu'elle sépare — à 16px elle valait 1,04× l'écart
+   interne, donc rien du tout. */
+#systray {
+    margin-left: 24px;
+}
+
+/* La marge tient au GROUPE, pas à son premier module : custom/claude
+   disparaît dès qu'aucune session ne tourne, et emportait avec lui la
+   respiration qui ouvre la zone. */
+#status {
+    margin-left: 24px;
+}
+
+#system {
+    margin-left: 24px;
 }
 
 /* ═══ Survol : la pilule apparaît sous le curseur, et nulle part ailleurs ═══ */
@@ -145,6 +189,7 @@ window#waybar {
 #custom-power:hover,
 #custom-remote:hover,
 #custom-recorder:hover,
+#custom-voice-rec:hover,
 #custom-updates:hover,
 #custom-ws-tens:hover,
 #power-profiles-daemon:hover,
@@ -152,6 +197,41 @@ window#waybar {
 #idle_inhibitor:hover {
     background-color: @fill;
     color: @ink;
+}
+
+/* ═══ Pression : le clic s'enfonce d'un cran ═══
+   Les popups GTK mettent 100 à 300 ms à s'ouvrir. Sans cet état, le clic
+   semble n'avoir rien déclenché. Même remplissage que la sélection. */
+#clock:active,
+#battery:active,
+#backlight:active,
+#mpris:active,
+#privacy:active,
+#systray:active,
+#tools:active,
+#status:active,
+#system:active,
+#connect:active,
+#audio:active,
+#custom-chrome:active,
+#custom-claude:active,
+#custom-dnd:active,
+#custom-remote:active,
+#custom-recorder:active,
+#custom-voice-rec:active,
+#custom-updates:active,
+#custom-ws-tens:active,
+#power-profiles-daemon:active,
+#systemd-failed-units:active,
+#idle_inhibitor:active,
+#workspaces button:active {
+    background-color: @fillHard;
+    color: @ink;
+}
+
+#custom-power:active {
+    background-color: rgba(255, 69, 58, 0.28);
+    color: @sysRed;
 }
 
 /* Contenu révélé d'un drawer : légèrement plus dense que la pilule de survol,
@@ -166,28 +246,42 @@ window#waybar {
 }
 
 /* ═══ Largeurs minimales ═══
-   Inter est proportionnelle : ses chiffres n'ont pas tous la même chasse, donc
-   « 100% » → « 99% » → « 9% » décalerait toute la barre à chaque rafraîchi.
-   Ces minimums figent la place réservée. Valeurs revues à la baisse par
-   rapport au monospace, plus étroit à taille égale. */
-#battery,
-#backlight,
-#cpu,
+   SF Pro Text est proportionnelle. Les chiffres eux-mêmes sont tabulaires
+   (font-feature-settings "tnum" plus haut), mais cela ne règle que la chasse
+   d'un chiffre à l'autre : un compteur qui gagne un caractère — « 99% » →
+   « 100% », « 8 » → « 2/8 » — décale malgré tout toute la barre. Ces minimums
+   figent la place réservée au cas le plus large. */
 #memory,
 #disk {
     min-width: 42px;
+}
+
+#cpu.high,
+#cpu.critical,
+#battery.warning,
+#battery.critical,
+#battery.charging {
+    min-width: 46px;
 }
 
 #temperature {
     min-width: 50px;
 }
 
+/* Les deux moitiés de l'horloge portent la MÊME action au clic : rien ne
+   justifie qu'elles se lisent comme deux zones. Les paddings intérieurs
+   tombent à 2px — l'écart d'encre passe de 23px à une dizaine, soit moins
+   que le pas de la rangée d'icônes — et « mar. 01 sept. 16:32 » redevient
+   une seule inscription. Les minimums, eux, restent : ils sont calés sur le
+   pire cas mesuré (81px pour « mar. 01 sept. »). */
 #clock.date {
-    min-width: 86px;
+    min-width: 84px;
+    padding-right: 2px;
 }
 
 #clock.time {
-    min-width: 48px;
+    min-width: 47px;
+    padding-left: 2px;
 }
 
 #pulseaudio.percentage {
@@ -196,6 +290,18 @@ window#waybar {
 
 #custom-dots {
     min-width: 18px;
+}
+
+/* Sessions Claude : « 8 » puis « 2/8 » dès qu'une session réclame une action —
+   soit deux caractères de plus, apparaissant précisément au moment où l'on
+   veut lire la barre. */
+#custom-claude {
+    min-width: 44px;
+}
+
+/* Mises à jour : de « 3 » à « 300 » selon le retard accumulé. */
+#custom-updates {
+    min-width: 38px;
 }
 
 /* ═══ Workspaces ═══
@@ -241,9 +347,23 @@ window#waybar {
     color: #ffffff;
 }
 
-/* ═══ Titre de fenêtre : contexte, donc encre secondaire ═══ */
+/* ═══ Nom de l'application active ═══
+   Sur macOS c'est le seul élément gras de toute la menu bar, et il est en
+   encre pleine : c'est lui qui répond à « où suis-je ». Le titre du document
+   n'y figure pas — il appartient à la barre de titre de la fenêtre.
+   600 et non 700 : Inter/SF Pro passent au Bold à 700, ce qui produit une
+   tache noire à 13px. Le Semibold garde le mot lisible tout en le détachant
+   nettement des libellés voisins. */
 #window {
-    color: @ink2;
+    color: @ink;
+    font-weight: 600;
+    /* Sans cette marge, le nom de l'app est à 21px du dernier workspace, soit
+       l'écart exact qui sépare deux workspaces : « 1 2 3 4 5 6 7 8 Kitty » se
+       lit alors comme une seule série. C'est pourtant l'élément qui répond à
+       « où suis-je » — il lui faut la même coupure qu'aux zones de droite. */
+    margin-left: 12px;
+    padding-left: 4px;
+    padding-right: 8px;
 }
 
 /* ═══ Horloge : ancre visuelle de la barre, encre pleine ═══ */
@@ -252,18 +372,66 @@ window#waybar {
     font-weight: 600;
 }
 
-/* ═══ Icônes seules ═══
-   Un glyphe à la taille du texte paraît plus petit que lui ; +1px rétablit
-   l'équilibre optique. */
-#idle_inhibitor,
-#custom-chrome,
+/* ═══ La zone état ═══
+   Ses modules sont des paires — un glyphe puis un nombre — et une paire ne se
+   lit comme telle que si elle est plus serrée que ce qui l'entoure. Au padding
+   commun de 5px, l'écart entre « 6/13 » et la cloche suivante valait 7px, pour
+   5px entre la cloche et son propre compteur : les paires ne se formaient pas,
+   la zone se lisait comme une file de chiffres. 10px triple l'écart entre les
+   modules sans toucher à celui qui tient chaque paire ensemble, et la zone
+   reste malgré tout plus dense que la rangée d'icônes — c'est un paquet. */
+#custom-claude,
 #custom-dnd,
-#custom-power,
-#custom-remote,
+#custom-updates,
+#systemd-failed-units {
+    padding: 0 10px;
+}
+
+/* ═══ La rangée d'icônes ═══
+   Tout module qui n'affiche qu'un glyphe occupe une CELLULE de largeur fixe.
+   Sans elle, le pas de la rangée suit la chasse des glyphes — le wifi est
+   large, la batterie étroite — et les écarts mesurés allaient de 16 à 27px
+   sans qu'aucune règle ne les explique. 22px de contenu + 5px de padding de
+   part et d'autre donnent un pas constant, dans un groupe (padding 1px)
+   comme hors groupe (margin 1px) : c'est la grille d'une menu bar système.
+
+   Le padding est reposé ici à 5px : les modules de groupe en héritaient 7,
+   ce qui rendait la cellule du CPU et du réseau plus large que celle de la
+   batterie, à quatre pixels près.
+
+   14px et non 13 : un glyphe à la taille du texte paraît plus petit que lui.
+   À cette taille, les glyphes de la rangée pèsent de 34 à 41 unités d'encre,
+   ce qui est ce qui donne à une rangée son homogénéité — bien plus que leur
+   taille nominale. C'est à ce titre que `backlight` a quitté brightness_high
+   (62 unités, le glyphe le plus lourd de la barre, pour l'information la
+   moins importante) pour light_mode, à 36 : voir `format-icons` du module
+   dans config-full.
+   La graisse est fixée à 500 pour la même raison qu'elle est fixée du tout —
+   Material Symbols est une fonte variable, donc une icône dans un module
+   passé en 600 pour signaler un état grossissait de 20% d'encre. Le poids
+   d'une icône n'est pas un signal ; sa couleur l'est. */
+#cpu,
+#network,
+#pulseaudio.icon,
+#custom-tray-handle,
 #custom-toggle-info,
 #custom-keybinds,
-#custom-dots,
-#power-profiles-daemon {
+#backlight,
+#battery,
+#idle_inhibitor,
+#power-profiles-daemon,
+#custom-chrome,
+#custom-power,
+#custom-remote {
+    font-size: 14px;
+    font-weight: 500;
+    min-width: 22px;
+    padding: 0 5px;
+}
+
+/* Le « ⋮ » porte un compteur : ce n'est pas une icône seule, donc pas de
+   cellule — mais la même taille de glyphe que ses voisines du groupe. */
+#custom-dots {
     font-size: 14px;
 }
 
@@ -285,7 +453,22 @@ window#waybar {
     50% { color: @ink; }
 }
 
+/* ── Processeur ──
+   Le chiffre n'apparaît qu'au-delà du seuil (voir "states" dans config-full) ;
+   la couleur double le signal une fois qu'il est là. */
+#cpu.high {
+    color: @sysOrange;
+}
+
+#cpu.critical {
+    color: @sysRed;
+}
+
 /* ── Température ── */
+#temperature.hot {
+    color: @sysOrange;
+}
+
 #temperature.critical {
     color: @sysRed;
     animation: blink 1.4s ease-in-out infinite;
@@ -297,8 +480,9 @@ window#waybar {
     font-weight: 600;
 }
 
-/* ── Mises à jour en attente : information, pas alerte → encre secondaire.
-      Passe l'orange seulement quand le retard devient significatif. ── */
+/* ── Mises à jour en attente : information, pas alerte. Un retard de mise à
+      jour n'est pas une anomalie système, donc pas de couleur — le nombre
+      remonte simplement d'un cran dans la hiérarchie d'encre quand il grossit. ── */
 #custom-updates {
     color: @ink2;
 }
@@ -382,13 +566,12 @@ window#waybar {
     color: @ink;
 }
 
-/* Le « ⋮ » porte le compteur des modules repliés faute de place. */
+/* Le « ⋮ » porte le compteur des modules repliés faute de place. Encre
+   tertiaire au repos ; le compteur lui-même est peint en encre pleine par
+   generate-config.py, ce qui suffit à le détacher — un gras en @ink3
+   reviendrait à insister et à effacer d'un même geste. */
 #custom-dots {
     color: @ink3;
-}
-
-#tools #custom-dots {
-    font-weight: 600;
 }
 
 /* ── Bouton mode dizaines (+10) : bascule, donc traité comme une sélection ── */
@@ -423,19 +606,23 @@ window#waybar {
 }
 
 /* ── Sessions Claude Code ──
-   L'encre monte à mesure que la session réclame de l'attention :
-   en cours (terne) → terminée (pleine) → en attente (orange). */
-#custom-claude {
-    color: @ink3;
-}
-
-#custom-claude.done {
+   Toujours en encre pleine, quel que soit l'état. « 2/8 » et « 8 » se lisent
+   déjà l'un pour l'autre ; le gras seul ne les séparait pas à 13px, donc
+   l'attente prend en plus le soulignement d'un pixel — le même dispositif que
+   le rappel de `.claude-off`, en encre et non en couleur. */
+#custom-claude,
+#custom-claude.done,
+#custom-claude.waiting {
     color: @ink;
 }
 
 #custom-claude.waiting {
-    color: @sysOrange;
     font-weight: 600;
+    /* Soulignement par dégradé plutôt que par `box-shadow: inset` : l'ombre
+       interne suit le border-radius sur toute la hauteur du rayon, et les
+       extrémités du trait remontent de 7px — on lit une demi-pilule, pas un
+       trait. Le fond, lui, est simplement découpé par le rayon. */
+    background-image: linear-gradient(to top, @ink 2px, transparent 2px);
 }
 
 /* ── Do Not Disturb ──
@@ -445,9 +632,11 @@ window#waybar {
     color: @ink2;
 }
 
+/* Le compteur passe en encre pleine ; il portait en plus un gras 600, qui
+   épaississait la cloche elle-même de 20% d'encre — une icône qui change de
+   graisse selon l'état est du bruit, le nombre suffit. */
 #custom-dnd.has-notifs {
     color: @ink;
-    font-weight: 600;
 }
 
 #custom-dnd.active,
@@ -455,9 +644,17 @@ window#waybar {
     color: @ink;
 }
 
-/* Effet « Notif Claude → fenêtre » désactivé : soulignement de rappel. */
+/* Effet « Notif Claude → fenêtre » désactivé : soulignement de rappel.
+   Même dispositif que l'attente de `#custom-claude`, cf. la note là-bas. */
 #custom-dnd.claude-off {
-    box-shadow: inset 0 -2px 0 @sysBlue;
+    background-image: linear-gradient(to top, @sysBlue 2px, transparent 2px);
+}
+
+/* ── Enregistrement vocal (masqué hors enregistrement) ── */
+#custom-voice-rec {
+    color: @sysRed;
+    font-weight: 600;
+    animation: recording-pulse 2s ease-in-out infinite;
 }
 
 /* ── Enregistrement d'écran (masqué hors enregistrement) ── */
@@ -476,6 +673,7 @@ window#waybar {
 #custom-power {
     color: @ink2;
     margin-right: 5px;
+    margin-left: 24px;
 }
 
 #custom-power:hover {

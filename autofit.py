@@ -42,46 +42,87 @@ INTERVAL = 30           # tick de secours en mode --watch (secondes)
 DEBOUNCE = 0.4          # calme à attendre après une rafale d'événements Hyprland
 SAFETY = 48             # marge de sécurité (px logiques) : couvre l'imprécision
 HYSTERESIS = 32         # place à regagner en plus avant de ressortir un module
-FONT = "JetBrainsMono Nerd Font Propo"
+RELOAD_GAP = 5          # délai minimal entre deux rechargements de waybar
+FONT = "SF Pro Text"    # police de la barre (cf. style-normal.css)
 FONT_PX = 13
-SPACING = 4             # "spacing" de la barre, entre modules
-MARGIN = 4              # margin: 4px 2px -> 2 + 2 horizontalement
+SPACING = 2             # "spacing" de la barre, entre modules
+
+# Gabarits de padding, relevés dans style-normal.css. Le nom dit la règle CSS
+# d'origine : quand le style bouge, c'est ici qu'il faut répercuter.
+PAD_MODULE = 10 + 2     # padding: 0 5px + margin: 3px 1px
+PAD_IN_GROUP = 14       # modules dans une pilule de groupe : padding: 0 7px
+PAD_GROUP = 2           # la pilule elle-même : padding: 0 1px
+PAD_ICON = 10           # cellule d'icône dans un groupe : padding ramené à 5px
+PAD_STATUS = 20 + 2     # zone état : padding: 0 10px + margin: 3px 1px
+
+# Largeur de cellule des modules qui n'affichent qu'un glyphe (`min-width`
+# dans le bloc « La rangée d'icônes » du CSS). Sans ce plancher, un glyphe
+# étroit — la batterie fait 6px — serait mesuré à sa chasse alors qu'il
+# occupe la cellule entière, et la barre se replierait trop tard.
+MIN_ICON = 22
+
+# Espaces de « rythme » ajoutés à quatre modules pour séparer les zones
+# fonctionnelles de la barre (margin-left dans le CSS).
+RHYTHM = {
+    "group/systray": 24,
+    "group/status": 24,
+    "group/system": 24,
+    "custom/power": 24 + 5,   # + margin-right
+    "hyprland/window": 12,    # coupure entre les workspaces et le nom de l'app
+}
 
 ZONES = ("modules-left", "modules-center", "modules-right")
 
-# Gabarit de mesure par module : (texte représentatif, padding horizontal,
-# taille de police). Le texte est le pire cas courant, pas le pire absolu.
-# padding/police repris de style-normal.css.
-SPECS = {
-    "custom/ws-tens":          ("+10", 16, 13),
-    "custom/chrome":           ("\U000f00af", 20, 15),
-    "clock#time":              ("\U000f0954 00:00", 18, 13),
-    "clock#date":              ("\U000f00ed mer 30 sept", 18, 13),
-    "custom/tray-handle":      ("\U000f0141", 20, 13),
-    "custom/dots":             ("⋮ 9", 20, 15),
-    "custom/toggle-info":      ("\U000f0208", 20, 15),
-    "custom/keybinds":         ("\U000f030c", 20, 15),
-    "custom/dnd":              ("\U000f009a", 20, 15),
-    "cpu":                     ("\U000f07e0 100%", 18, 13),
-    "temperature":             ("\U000f10c3 100°C", 18, 13),
-    "memory":                  ("\U000f035b 100%", 18, 13),
-    "disk":                    ("\U000f028b 100%", 18, 13),
-    "network":                 ("\U000f05a9", 18, 13),
-    "bluetooth":               ("\U000f00b1 AirPods P", 18, 13),
-    "pulseaudio#icon":         ("\U000f057e", 13, 13),
-    "pulseaudio#percentage":   ("100%", 13, 13),
-    "backlight":               ("\U000f00e0 100%", 18, 13),
-    "idle_inhibitor":          ("\U000f0fba", 18, 15),
-    "power-profiles-daemon":   ("\U000f0442", 18, 15),
-    "battery":                 ("\U000f0082 100%", 18, 13),
-    "custom/power":            ("\U000f0425", 24, 15),
-    "privacy":                 ("", 16, 13),
-    "systemd-failed-units":    ("", 18, 13),
-    "custom/updates":          ("", 18, 13),
-    "hyprland/window":         ("", 18, 13),
-    "mpris":                   ("", 18, 13),
-    "hyprland/workspaces":     ("", 18, 13),
+# Modules à cellule fixe : leur largeur est max(chasse du glyphe, MIN_ICON).
+# La liste suit celle du bloc « La rangée d'icônes » de style-normal.css.
+ICON_CELL = {
+    "cpu", "network", "pulseaudio#icon", "custom/tray-handle",
+    "custom/toggle-info", "custom/keybinds", "backlight", "battery",
+    "idle_inhibitor", "power-profiles-daemon", "custom/chrome",
+    "custom/power", "custom/remote",
 }
+
+# Gabarit de mesure par module : (texte affiché, padding horizontal total,
+# taille de police). Le texte est celui que le module rend vraiment — un
+# `format` réduit à "{icon}" ne vaut qu'un glyphe, pas « icône + 100% » — et le
+# padding vient de style-normal.css (PAD_* ci-dessus), marge comprise. Un
+# gabarit trop large replie des modules alors que la barre est à moitié vide.
+# Les modules qui n'apparaissent que dans un état particulier sont mesurés à
+# chaud dans DYNAMIC, pas ici.
+SPECS = {
+    "custom/ws-tens":          ("+10", PAD_MODULE, 13),
+    "custom/chrome":           ("\U000f00af", PAD_MODULE, 14),
+    "clock#time":              ("00:00", PAD_MODULE, 13),
+    "clock#date":              ("mar. 01 sept.", PAD_MODULE, 13),
+    "custom/tray-handle":      ("\U000f0141", PAD_ICON, 14),
+    "custom/dots":             ("⋮ 9", PAD_IN_GROUP, 14),
+    "custom/toggle-info":      ("\U000f0208", PAD_ICON, 14),
+    "custom/keybinds":         ("\U000f030c", PAD_ICON, 14),
+    "custom/dnd":              ("\U000f009a 99+", PAD_STATUS, 13),
+    "custom/claude":           ("\U000f051f 00/00", PAD_STATUS, 13),
+    "cpu":                     ("\U000f0ee0", PAD_ICON, 14),
+    "temperature":             ("\U000f10c3 100°C", PAD_IN_GROUP, 13),
+    "memory":                  ("\U000f035b 100%", PAD_IN_GROUP, 13),
+    "disk":                    ("\U000f028b 100%", PAD_IN_GROUP, 13),
+    "network":                 ("\U000f05a9", PAD_ICON, 14),
+    "bluetooth":               ("\U000f00b1 AirPods P", PAD_IN_GROUP, 13),
+    "pulseaudio#icon":         ("\U000f057e", PAD_ICON, 14),
+    "pulseaudio#percentage":   ("100%", 11, 13),
+    "backlight":               ("\U000f00e0", PAD_MODULE, 14),
+    "idle_inhibitor":          ("\U000f0fba", PAD_MODULE, 14),
+    "power-profiles-daemon":   ("\U000f0442", PAD_MODULE, 14),
+    "battery":                 ("\U000f0082", PAD_MODULE, 14),
+    "custom/power":            ("\U000f0425", PAD_MODULE, 14),
+    "privacy":                 ("", PAD_MODULE, 13),
+    "systemd-failed-units":    ("", PAD_MODULE, 13),
+    "custom/updates":          ("", PAD_MODULE, 13),
+    "custom/voice-rec":        ("", PAD_MODULE, 13),
+    "custom/recorder":         ("", PAD_MODULE, 13),
+    "hyprland/window":         ("", PAD_MODULE, 13),
+    "mpris":                   ("", PAD_MODULE, 13),
+    "hyprland/workspaces":     ("", PAD_MODULE, 13),
+}
+
 
 _FALLBACK_CHAR_PX = 8.2  # si Pango indisponible
 
@@ -162,9 +203,9 @@ def workspaces_width():
              if isinstance(w.get("id"), int)
              and (11 <= w["id"] <= 20 if tens else 1 <= w["id"] <= 10)]
     n = max(len(shown), 1)
-    # Chaque bouton : chiffre + padding 6px de chaque côté.
-    per_button = measure_text("10", 13) + 12
-    return n * per_button + 18
+    # Un bouton = un chiffre + padding: 0 8px + margin: 0 1px (style-normal.css).
+    per_button = measure_text("8", 13) + 16 + 2
+    return n * per_button + 4 + PAD_MODULE   # #workspaces padding: 0 2px
 
 
 def mpris_width():
@@ -172,16 +213,36 @@ def mpris_width():
     if not players:
         return 0
     # format "{icon} {dynamic}" avec dynamic-len 20, borné par max-length 28.
-    return measure_text("\U000f0230 " + "M" * 20, 13) + 18
+    return measure_text("\U000f0230 " + "M" * 20, 13) + PAD_MODULE
+
+
+_WINDOW_WIDTH = None
 
 
 def window_width():
-    try:
-        win = json.loads(run(["hyprctl", "activewindow", "-j"], "{}"))
-    except json.JSONDecodeError:
-        return 0
-    title = (win.get("title") or "")[:25]
-    return measure_text(title, 13) + 18 if title else 0
+    """Largeur du module « nom de l'app » — constante, et c'est voulu.
+
+    Le module rend `{initialClass}` passé par les rewrites de config-full
+    (« Kitty », « Google Chrome », « Bureau »…), pas le titre de la fenêtre.
+    Mesurer la fenêtre focalisée faisait varier la largeur à chaque changement
+    de bureau : autofit repliait un module puis le ressortait, et chaque
+    bascule recharge waybar (SIGUSR2) — la barre disparaît le temps du
+    rechargement et les tuiles se redimensionnent. On mesure donc le pire cas
+    une fois pour toutes : la décision de repli ne dépend plus du bureau
+    courant.
+    """
+    global _WINDOW_WIDTH
+    if _WINDOW_WIDTH is None:
+        try:
+            with open(TEMPLATE, encoding="utf-8") as f:
+                mod = json.load(f).get("hyprland/window", {})
+        except (OSError, json.JSONDecodeError):
+            mod = {}
+        limit = mod.get("max-length", 28)
+        labels = [str(v)[:limit] for v in mod.get("rewrite", {}).values()]
+        _WINDOW_WIDTH = max(measure_text(t, 13)
+                            for t in labels or ["Bureau"]) + PAD_MODULE
+    return _WINDOW_WIDTH
 
 
 def updates_width():
@@ -192,18 +253,41 @@ def updates_width():
             n = sum(1 for line in f if line.strip() and line.strip() != "---")
     except OSError:
         return 0
-    return measure_text("\U000f0590 %d" % n, 13) + 18 if n else 0
+    return measure_text("\U000f0590 %d" % n, 13) + PAD_STATUS if n else 0
 
 
 def failed_units_width():
     out = run(["systemctl", "--failed", "--no-legend", "--plain"])
-    return measure_text("\U000f002a 1", 13) + 18 if out else 0
+    return measure_text("\U000f002a 1", 13) + PAD_STATUS if out else 0
 
 
 def privacy_width():
     """Micro / partage d'écran actifs : le module n'existe qu'à ce moment-là."""
     out = run(["pactl", "list", "source-outputs", "short"])
-    return 34 if out else 0
+    return measure_text("\U000f036c", 13) + 6 + PAD_MODULE if out else 0
+
+
+def voice_rec_width():
+    """Enregistrement vocal en cours : sinon voice-status.sh n'émet rien.
+
+    Le module disparaît alors de la barre, et lui compter une largeur revenait
+    à replier un module visible pour loger un module absent.
+    """
+    try:
+        with open("/tmp/waybar-voicerec.pid", encoding="utf-8") as fh:
+            pid = fh.read().strip()
+    except OSError:
+        return 0
+    if not pid.isdigit() or not os.path.exists("/proc/" + pid):
+        return 0
+    return measure_text("\U000f036c 00:00", 13) + PAD_MODULE
+
+
+def recorder_width():
+    """Capture d'écran en cours (wf-recorder) : même logique que ci-dessus."""
+    if not run(["pgrep", "-x", "wf-recorder"]):
+        return 0
+    return measure_text("\U000f0567 00:00", 13) + PAD_MODULE
 
 
 DYNAMIC = {
@@ -213,17 +297,23 @@ DYNAMIC = {
     "custom/updates": updates_width,
     "systemd-failed-units": failed_units_width,
     "privacy": privacy_width,
+    "custom/voice-rec": voice_rec_width,
+    "custom/recorder": recorder_width,
 }
 
 
 # ── Calcul de largeur ─────────────────────────────────────────────────────
 
 def module_width(mid):
+    """Largeur occupée par un module, marges comprises (0 s'il est absent)."""
     if mid in DYNAMIC:
         w = DYNAMIC[mid]()
-        return w + MARGIN if w else 0
-    text, pad, size = SPECS.get(mid, ("MMMM", 18, 13))
-    return measure_text(text, size) + pad + MARGIN
+        return w + RHYTHM.get(mid, 0) if w else 0
+    text, pad, size = SPECS.get(mid, ("MMMM", PAD_MODULE, 13))
+    w = measure_text(text, size)
+    if mid in ICON_CELL:
+        w = max(w, MIN_ICON)
+    return w + pad + RHYTHM.get(mid, 0)
 
 
 def group_width(cfg, gid, hidden):
@@ -235,9 +325,10 @@ def group_width(cfg, gid, hidden):
     mods = [m for m in cfg.get(gid, {}).get("modules", []) if m not in hidden]
     if not mods:
         return 0
+    extra = PAD_GROUP + RHYTHM.get(gid, 0)
     if "drawer" in cfg.get(gid, {}):
-        return module_width(mods[0])
-    return sum(module_width(m) for m in mods)
+        return module_width(mods[0]) + extra
+    return sum(module_width(m) for m in mods) + extra
 
 
 def total_width(cfg, hidden):
@@ -273,12 +364,23 @@ def load_priority():
     return steps
 
 
+_last_reload = 0.0
+
+
 def apply(auto_hidden):
+    global _last_reload
     with open(AUTO_HIDDEN_FILE, "w", encoding="utf-8") as f:
         for mid in auto_hidden:
             f.write(mid + "\n")
     subprocess.run(["python3", GENERATE], check=False)
+    # Un SIGUSR2 détruit et recrée la barre : visible à l'écran (les fenêtres
+    # reprennent l'espace le temps du rechargement) et coûteux (waybar relance
+    # tous ses modules custom). On espace donc deux rechargements.
+    wait = RELOAD_GAP - (time.monotonic() - _last_reload)
+    if wait > 0:
+        time.sleep(wait)
     subprocess.run(["pkill", "-SIGUSR2", "waybar"], check=False)
+    _last_reload = time.monotonic()
 
 
 # ── Boucle de décision ────────────────────────────────────────────────────

@@ -35,12 +35,50 @@ Arch Linux + Hyprland. Everything else is optional but modules degrade to
 "hidden" rather than breaking the bar.
 
 ```bash
-sudo pacman -S waybar python-gobject gtk3 gtk-layer-shell inter-font \
+sudo pacman -S waybar python-gobject gtk3 gtk-layer-shell \
+               inter-font ttf-material-symbols-variable \
                networkmanager pipewire-pulse wireplumber brightnessctl \
                playerctl pacman-contrib
 # optional, per module:
 sudo pacman -S swaync hyprsunset hypridle bluez-utils
 ```
+
+### Icon font
+
+Icons come from **Material Symbols Rounded** — a single family with a uniform
+stroke, rather than a mix of outlined and solid glyphs. Application logos
+(Chrome, Firefox, Spotify) stay in Nerd Font, which Material Symbols does not
+cover; a brand mark has no reason to follow the system icon grammar anyway.
+
+One catch: Inter and Adwaita Sans both ship ~745 glyphs in the private use
+area U+E000–U+F8FF, the same range Material Symbols uses. Being first in the
+font stack, they win the lookup and render their own glyphs instead — the
+speaker icon comes out as a vertical bar. Reordering the stack is not an
+option, since Material Symbols contains A–Z and would take over uppercase
+letters in ordinary text.
+
+The fix is to drop that range from the two text fonts. Save as
+`~/.config/fontconfig/conf.d/99-icon-pua.conf` and run `fc-cache -f`:
+
+```xml
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <match target="scan">
+    <test name="family"><string>Inter</string></test>
+    <edit name="charset" mode="assign">
+      <minus>
+        <name>charset</name>
+        <charset><range><int>0xE000</int><int>0xF8FF</int></range></charset>
+      </minus>
+    </edit>
+  </match>
+  <!-- repeat the same block for "Adwaita Sans" -->
+</fontconfig>
+```
+
+They keep all their text coverage; they simply stop offering themselves for
+icons.
 
 ### Translucent material
 
