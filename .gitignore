@@ -14,6 +14,10 @@ _bak_*
 *.orig
 *.tmp
 
-# Généré par generate-config.py (contient les chemins matériels résolus).
-# Suivi dans arch-config (sauvegarde), ignoré dans le dépôt public.
+# Généré par generate-config.py (contient les chemins matériels résolus),
+# donc ignoré dans les deux dépôts. Il était suivi dans arch-config comme
+# sauvegarde ; depuis l'activation de Stow, ~/.config/waybar est un lien vers
+# le dépôt, si bien que chaque repli automatique de la barre réécrivait le
+# fichier ici même et `git status` n'était plus jamais propre. Les install.sh
+# des deux dépôts le régénèrent au clone.
 config-active

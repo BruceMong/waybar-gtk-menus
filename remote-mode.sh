@@ -5,6 +5,17 @@ STATE_FILE="/tmp/remote-mode-active"
 BRIGHTNESS_SAVE="/tmp/remote-mode-brightness"
 STYLE_DIR="$HOME/.config/waybar"
 
+# style.css est un lien vers style-normal.css ou style-remote.css, et ce lien
+# appartient au dépôt (Stow ne fait que le refléter dans ~/.config). On le
+# bascule donc là où il vit réellement : un `ln -sf` dans $STYLE_DIR
+# écraserait le lien de Stow par un lien absolu, et la config cesserait
+# d'être suivie. Le dossier réel se déduit d'un fichier voisin non ambigu.
+REAL_DIR="$(dirname "$(readlink -f "$STYLE_DIR/style-normal.css")")"
+
+set_style() {  # set_style <fichier de style>
+    ln -sfn "$1" "$REAL_DIR/style.css"
+}
+
 if [ -f "$STATE_FILE" ]; then
     # === Désactiver ===
     if [ -f "$BRIGHTNESS_SAVE" ]; then
@@ -22,7 +33,7 @@ if [ -f "$STATE_FILE" ]; then
     rm -f /tmp/remote-mode-dnd
 
     # Revenir au style normal
-    ln -sf "$STYLE_DIR/style-normal.css" "$STYLE_DIR/style.css"
+    set_style style-normal.css
 else
     # === Activer ===
     brightnessctl get > "$BRIGHTNESS_SAVE"
@@ -38,7 +49,7 @@ else
     "$STYLE_DIR/dnd-toggle.sh" on
 
     # Passer au style remote (barre rouge)
-    ln -sf "$STYLE_DIR/style-remote.css" "$STYLE_DIR/style.css"
+    set_style style-remote.css
 
     loginctl lock-session
 fi
