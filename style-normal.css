@@ -24,6 +24,8 @@
 @define-color ink   #ebebf0;  /* primaire   — valeurs, icônes actives */
 @define-color ink2  #9a9aa2;  /* secondaire — libellés, contexte */
 @define-color ink3  #68686f;  /* tertiaire  — inactif, désactivé */
+@define-color inkSel #ffffff; /* sélection  — blanc pur, un cran au-dessus
+                                 de @ink : réservé à ce qui est actif */
 
 /* ── Remplissages (survol / sélection) ── */
 @define-color fill     rgba(255, 255, 255, 0.10);
@@ -333,7 +335,7 @@ window#waybar {
 }
 
 #workspaces button.active {
-    color: #ffffff;
+    color: @inkSel;
     background-color: @fillHard;
 }
 
@@ -344,7 +346,7 @@ window#waybar {
 
 #workspaces button.active:hover {
     background-color: @fillHard;
-    color: #ffffff;
+    color: @inkSel;
 }
 
 /* ═══ Nom de l'application active ═══
@@ -413,6 +415,7 @@ window#waybar {
 #cpu,
 #network,
 #pulseaudio.icon,
+#pulseaudio.mic,
 #custom-tray-handle,
 #custom-toggle-info,
 #custom-keybinds,
@@ -511,6 +514,22 @@ window#waybar {
     padding: 0 8px 0 3px;
 }
 
+/* ── Micro coupé ──
+   Module de barre et non membre du groupe audio : il faut donc défaire la
+   géométrie serrée héritée de `#pulseaudio` (pensée pour l'intérieur d'un
+   drawer) et retrouver celle des modules de premier niveau.
+
+   Orange et non rouge : le rouge appartient déjà au micro *ouvert*
+   (`#privacy-item.audio-in`) et aux enregistrements en cours. Deux états
+   opposés dans la même couleur ne se distingueraient plus d'un coup d'œil. */
+#pulseaudio.mic {
+    color: @sysOrange;
+    min-width: 0;
+    padding: 0 5px;
+    margin: 3px 1px;
+    border-radius: 7px;
+}
+
 /* ── Média (mpris) ── */
 #mpris.paused {
     color: @ink3;
@@ -581,13 +600,13 @@ window#waybar {
 }
 
 #custom-ws-tens.active {
-    color: #ffffff;
+    color: @inkSel;
     background-color: @fillHard;
 }
 
 #custom-ws-tens.active:hover {
     background-color: @fillHard;
-    color: #ffffff;
+    color: @inkSel;
 }
 
 /* ── Mode remote ── */

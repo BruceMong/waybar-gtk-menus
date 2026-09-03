@@ -20,7 +20,8 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, GLib  # noqa: E402
 
-from menu_common import LayerPopup  # noqa: E402
+from menu_common import (LayerPopup, caption_label,  # noqa: E402
+                         section_label)
 
 DEVNULL = subprocess.DEVNULL
 SINK = "@DEFAULT_AUDIO_SINK@"
@@ -41,12 +42,13 @@ METER_DECAY = 0.30         # vitesse de retombée (0 = figé, 1 = instantané)
 
 METER_CSS = b"""
 levelbar trough {
-    background-color: rgba(255, 255, 255, 0.09);
-    border-radius: 5px;
-    min-height: 10px;
+    background-color: rgba(255, 255, 255, 0.10);
+    border-radius: 4px;
+    min-height: 8px;
     padding: 0;
+    border: none;
 }
-levelbar block { border-radius: 5px; }
+levelbar block { border-radius: 4px; }
 levelbar block.filled, levelbar block.low { background-color: #32d74b; }
 levelbar block.high { background-color: #ffd60a; }
 levelbar block.full { background-color: #ff453a; }
@@ -112,10 +114,30 @@ def fmt_duration(secs):
 
 
 class SoundPopup(LayerPopup):
+    """Trois cartes : ce qui sort, ce qui entre, ce qu'on enregistre.
+
+    L'ancienne version empilait quinze contrôles de même poids visuel sur un
+    seul niveau ; la carte du micro dit maintenant d'un coup d'œil que le
+    curseur, la coupure et le VU-mètre parlent du même périphérique.
+    """
+
+    # Un seul glyphe par fonction, tous dans la même fonte : les emoji couleur
+    # de la version précédente (🔊, 🎤) rompaient la colonne d'icônes, qui est
+    # justement ce qui aligne l'ensemble.
+    IC_OUT = "\U000f057e"      # haut-parleur
+    IC_MUTE = "\U000f075f"     # haut-parleur barré
+    IC_SINK = "\U000f04c3"     # périphérique de sortie
+    IC_MIC = "\U000f036c"      # micro
+    IC_MIC_OFF = "\U000f036d"  # micro barré
+    IC_LEVEL = ""              # le VU-mètre porte son propre libellé
+    IC_FOLDER = "\U000f024b"   # dossier
+    IC_FIX = "\U000f0709"      # rotation / réinitialisation
+    IC_PREFS = "\U000f0493"    # engrenage
+
     def __init__(self):
         super().__init__("Son", width=360, margin_right=70)
         self._timeouts = {}
-        self.sink_buttons = []
+        self.sink_rows = []
         self._meter_peak = 0.0       # dernier pic écrit par le thread de capture
         self._meter_shown = 0.0      # valeur affichée (lissée)
         self._meter_stop = threading.Event()
@@ -123,107 +145,85 @@ class SoundPopup(LayerPopup):
 
         vol, muted = get_volume(SINK)
 
-        # -- Volume haut-parleur --
-        lbl = Gtk.Label(xalign=0)
-        lbl.set_markup("<b>🔊  Haut-parleur</b>")
-        self.box.pack_start(lbl, False, False, 0)
+        # ── Sortie ──
+        out = self.add_card("Sortie")
         self.scale_out = self._make_scale(vol, SINK)
-        self.box.pack_start(self.scale_out, False, False, 0)
+        out.control(self.IC_OUT, self.scale_out)
+        out.toggle(self.IC_MUTE, "Muet", muted,
+                   lambda sw, _p: self._set_mute(SINK, sw))
 
-        self.box.pack_start(self._switch_row(
-            "  Muet", muted, lambda sw, _p: self._set_mute(SINK, sw)),
-            False, False, 0)
+        # Les sorties disponibles prolongent la carte : c'est le même sujet que
+        # le curseur juste au-dessus, pas une nouvelle rubrique. Une sortie
+        # unique ne mérite pas d'être listée — il n'y a rien à y choisir.
+        sinks = list_sinks()
+        for name, desc, is_def in (sinks if len(sinks) > 1 else []):
+            row = out.action(self.IC_SINK, desc, selected=is_def,
+                             on_click=lambda _b, n=name: self._select_sink(n))
+            self.sink_rows.append((row, name))
 
-        # -- Volume micro --
+        # ── Micro ──
         if source_exists():
             mvol, mmuted = get_volume(SOURCE)
-            lbl = Gtk.Label(xalign=0)
-            if mmuted:
-                lbl.set_markup(
-                    "<b>🎤  Micro  "
-                    "<span color='#ff453a'>(coupé)</span></b>")
-            else:
-                lbl.set_markup("<b>🎤  Micro</b>")
-            self.box.pack_start(lbl, False, False, 0)
+            mic = self.add_card("Micro")
             self.scale_mic = self._make_scale(mvol, SOURCE)
-            self.box.pack_start(self.scale_mic, False, False, 0)
-            self.box.pack_start(self._switch_row(
-                "  Micro coupé", mmuted,
-                lambda sw, _p: self._set_mute(SOURCE, sw)),
-                False, False, 0)
+            mic.control(self.IC_MIC, self.scale_mic)
+            mic.toggle(self.IC_MIC_OFF, "Micro coupé", mmuted,
+                       lambda sw, _p: self._set_mute(SOURCE, sw), green=True)
 
-            # VU-mètre : niveau d'entrée en temps réel.
-            lbl = Gtk.Label(xalign=0)
-            lbl.set_markup(
-                "<span size='small' color='#9a9aa2'>Niveau d'entrée</span>")
-            self.box.pack_start(lbl, False, False, 0)
+            # VU-mètre : le niveau réel, à vérifier avant de lancer un
+            # enregistrement. Empilé sous son propre libellé, il occupe la
+            # largeur du curseur qui le surplombe.
+            level = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+            level.pack_start(caption_label("Niveau d'entrée"), False, False, 0)
             self.meter = Gtk.LevelBar.new_for_interval(0.0, 1.0)
             self.meter.set_mode(Gtk.LevelBarMode.CONTINUOUS)
             self.meter.add_offset_value("low", 0.55)
             self.meter.add_offset_value("high", 0.80)
             self.meter.add_offset_value(Gtk.LEVEL_BAR_OFFSET_FULL, 1.0)
+            self.meter.set_valign(Gtk.Align.CENTER)
             self._apply_meter_css()
-            self.box.pack_start(self.meter, False, False, 0)
+            level.pack_start(self.meter, False, False, 0)
+            mic.control(self.IC_LEVEL, level)
 
             self._start_meter()
             GLib.timeout_add(METER_FPS_MS, self._refresh_meter)
             self.connect("destroy", lambda *_: self._stop_meter())
 
-        # -- Enregistrement de réunion --
+        # ── Enregistrement de réunion ──
         # Placé sous le micro : c'est le même geste mental (« ce que
         # j'enregistre »), et le VU-mètre juste au-dessus sert de vérification
-        # avant de lancer.
-        self.box.pack_start(Gtk.Separator(), False, False, 0)
-        lbl = Gtk.Label(xalign=0)
-        lbl.set_markup("<b>󰍬  Enregistrer la réunion</b>")
-        self.box.pack_start(lbl, False, False, 0)
-
-        self.rec_hint = Gtk.Label(xalign=0)
-        self.rec_hint.set_line_wrap(True)
-        self.box.pack_start(self.rec_hint, False, False, 0)
+        # avant de lancer. Hors carte : c'est l'action franche du popup, elle a
+        # droit à un bouton plein plutôt qu'à une ligne de liste.
+        rec = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        rec.pack_start(section_label("Enregistrer la réunion"), False, False, 0)
+        self.rec_hint = caption_label("")
+        rec.pack_start(self.rec_hint, False, False, 0)
 
         # Libellé facultatif : collé au nom du fichier pour retrouver la
         # réunion plus tard sans avoir à réécouter.
         self.rec_entry = Gtk.Entry()
         self.rec_entry.set_placeholder_text("Nom (facultatif) — ex. point client")
         self.rec_entry.connect("activate", self._toggle_record)
-        self.box.pack_start(self.rec_entry, False, False, 0)
+        rec.pack_start(self.rec_entry, False, False, 0)
 
         self.rec_btn = Gtk.Button()
         self.rec_btn.connect("clicked", self._toggle_record)
-        self.box.pack_start(self.rec_btn, False, False, 0)
-
-        btn = Gtk.Button(label="󰉋  Ouvrir le dossier des enregistrements")
-        btn.connect("clicked", self._open_rec_dir)
-        self.box.pack_start(btn, False, False, 0)
+        rec.pack_start(self.rec_btn, False, False, 0)
+        self.box.pack_start(rec, False, False, 0)
 
         self._refresh_record()
         GLib.timeout_add_seconds(1, self._refresh_record)
 
-        # -- Choix de la sortie --
-        sinks = list_sinks()
-        if len(sinks) > 1:
-            self.box.pack_start(Gtk.Separator(), False, False, 0)
-            lbl = Gtk.Label(xalign=0)
-            lbl.set_markup("<b>󰓃  Sortie</b>")
-            self.box.pack_start(lbl, False, False, 0)
-            for name, desc, is_def in sinks:
-                btn = Gtk.Button(label=("  " if is_def else "") + desc)
-                if is_def:
-                    btn.get_style_context().add_class("accent")
-                btn.connect("clicked", self._select_sink, name)
-                self.sink_buttons.append((btn, name))
-                self.box.pack_start(btn, False, False, 0)
-
-        # -- Réglages avancés --
-        self.box.pack_start(Gtk.Separator(), False, False, 0)
+        # ── Aller plus loin ──
+        more = self.add_card()
+        more.action(self.IC_FOLDER, "Dossier des enregistrements",
+                    on_click=self._open_rec_dir)
         if source_exists():
-            btn = Gtk.Button(label="󰜉  Réparer le micro (démute + reset)")
-            btn.connect("clicked", self._fix_mic)
-            self.box.pack_start(btn, False, False, 0)
-        btn = Gtk.Button(label="󰒓  Réglages avancés (pavucontrol)")
-        btn.connect("clicked", self._open_pavucontrol)
-        self.box.pack_start(btn, False, False, 0)
+            more.action(self.IC_FIX, "Réparer le micro",
+                        subtitle="Démute et réinitialise l'entrée",
+                        on_click=self._fix_mic)
+        more.action(self.IC_PREFS, "Réglages avancés", value="pavucontrol",
+                    chevron=True, on_click=self._open_pavucontrol)
 
     # ---- Construction ----
 
@@ -235,18 +235,6 @@ class SoundPopup(LayerPopup):
         scale.add_mark(100, Gtk.PositionType.BOTTOM, None)
         scale.connect("value-changed", self._on_volume_changed, target)
         return scale
-
-    def _switch_row(self, title, active, handler):
-        row = Gtk.Box(spacing=8)
-        lbl = Gtk.Label(xalign=0)
-        lbl.set_markup("<b>%s</b>" % title)
-        row.pack_start(lbl, True, True, 0)
-        sw = Gtk.Switch()
-        sw.set_valign(Gtk.Align.CENTER)
-        sw.set_active(active)
-        sw.connect("notify::active", handler)
-        row.pack_end(sw, False, False, 0)
-        return row
 
     # ---- Handlers ----
 
@@ -268,7 +256,7 @@ class SoundPopup(LayerPopup):
                           "1" if switch.get_active() else "0"],
                          stdout=DEVNULL, stderr=DEVNULL)
 
-    def _select_sink(self, _btn, name):
+    def _select_sink(self, name):
         subprocess.run(["pactl", "set-default-sink", name],
                        stdout=DEVNULL, stderr=DEVNULL)
         # Déplacer les flux en cours vers la nouvelle sortie.
@@ -277,16 +265,15 @@ class SoundPopup(LayerPopup):
             if idx:
                 subprocess.run(["pactl", "move-sink-input", idx, name],
                                stdout=DEVNULL, stderr=DEVNULL)
-        # Mettre à jour l'accent sur les boutons.
-        for btn, bname in self.sink_buttons:
-            ctx = btn.get_style_context()
-            label = btn.get_label().lstrip(" ").strip()
-            if bname == name:
-                ctx.add_class("accent")
-                btn.set_label("  " + label)
+        # La sélection se déplace d'une ligne à l'autre : c'est la classe qui
+        # porte l'état, plus besoin de réécrire les libellés pour y coller ou
+        # en retirer une coche.
+        for row, rname in self.sink_rows:
+            ctx = row.get_style_context()
+            if rname == name:
+                ctx.add_class("selected")
             else:
-                ctx.remove_class("accent")
-                btn.set_label(label)
+                ctx.remove_class("selected")
 
     def _open_pavucontrol(self, _btn):
         subprocess.Popen(["pavucontrol"], stdout=DEVNULL, stderr=DEVNULL)
@@ -314,18 +301,16 @@ class SoundPopup(LayerPopup):
             ctx.remove_class("accent")
             self.rec_entry.set_sensitive(False)
             self.rec_hint.set_markup(
-                "<span size='small' color='#ff453a'>Enregistrement en cours</span>"
-                "<span size='small' color='#9a9aa2'> — %s</span>"
+                "<span color='#ff453a'>Enregistrement en cours</span> — %s"
                 % GLib.markup_escape_text(name))
         else:
             self.rec_btn.set_label("  Démarrer l'enregistrement")
             ctx.add_class("accent")
             ctx.remove_class("danger")
             self.rec_entry.set_sensitive(True)
-            self.rec_hint.set_markup(
-                "<span size='small' color='#9a9aa2'>Micro et sortie audio sur "
-                "deux canaux séparés — la transcription sait qui parle."
-                "</span>")
+            self.rec_hint.set_text(
+                "Micro et sortie audio sur deux canaux séparés — "
+                "la transcription sait qui parle.")
         return GLib.SOURCE_CONTINUE
 
     def _refresh_record_once(self):

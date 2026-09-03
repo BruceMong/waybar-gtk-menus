@@ -7,7 +7,7 @@
 
     "modules-left": ["hyprland/workspaces", "custom/ws-tens", "hyprland/window", "custom/chrome", "mpris"],
     "modules-center": [],
-    "modules-right": ["custom/voice-rec", "custom/recorder", "privacy", "group/systray", "group/tools", "group/status", "group/system", "group/connect", "group/audio", "backlight", "idle_inhibitor", "power-profiles-daemon", "battery", "clock#date", "clock#time", "custom/power"],
+    "modules-right": ["custom/voice-rec", "custom/recorder", "privacy", "group/systray", "group/tools", "group/status", "group/system", "group/connect", "pulseaudio#mic", "group/audio", "backlight", "idle_inhibitor", "power-profiles-daemon", "battery", "clock#date", "clock#time", "custom/power"],
 
     "defaults": {
         "clock": {
@@ -285,6 +285,15 @@
         "on-click": "~/.config/waybar/sound-menu.py",
         "on-scroll-up": "wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ 5%+",
         "on-scroll-down": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
+    },
+
+    "pulseaudio#mic": {
+        "format": "{format_source}",
+        "format-source": "",
+        "format-source-muted": "\udb80\udf6d",
+        "on-click": "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle",
+        "on-click-right": "~/.config/waybar/sound-menu.py",
+        "tooltip-format": "Micro coupé — clic pour le réactiver"
     },
 
     "backlight": {

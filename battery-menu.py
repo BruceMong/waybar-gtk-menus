@@ -116,14 +116,25 @@ def set_timeout(marker, minutes):
 # --- Popup --------------------------------------------------------------------
 
 class BatteryPopup(LayerPopup):
+    """Deux cartes : ce que consomme la machine, quand elle s'éteint seule.
+
+    Chaque réglage tient dans une ligne unique — libellé et valeur en tête,
+    curseur en dessous. La version précédente alternait un libellé nu et un
+    curseur nu sur toute la hauteur du popup : rien ne rattachait l'un à
+    l'autre, sinon la proximité.
+    """
+
+    IC_PROFILE = "\U000f04c5"   # compteur de vitesse
+    IC_LOCK = "\U000f033e"      # cadenas
+    IC_SCREEN = "\U000f0379"    # écran
+    IC_SLEEP = "\U000f0904"     # veille
+
     def __init__(self):
         super().__init__("Batterie & Énergie", width=360, margin_right=150)
         self._reload_id = None
 
         # -- Profil énergétique --
-        self.lbl_profile = Gtk.Label(xalign=0)
-        self.box.pack_start(self.lbl_profile, False, False, 0)
-
+        energy = self.add_card("Énergie")
         self.scale_profile = Gtk.Scale.new_with_range(
             Gtk.Orientation.HORIZONTAL, 0, len(PROFILES) - 1, 1)
         self.scale_profile.set_draw_value(False)
@@ -132,14 +143,19 @@ class BatteryPopup(LayerPopup):
                                     Gtk.PositionType.BOTTOM, "Perf")
         prof_idx = self._current_profile_index()
         self.scale_profile.set_value(prof_idx)
-        self._set_profile_label(prof_idx)
+        _row, self.lbl_profile = energy.slider(
+            self.IC_PROFILE, "Profil", self.scale_profile,
+            PROFILES[prof_idx][1])
         self.scale_profile.connect("value-changed", self._on_profile_changed)
-        self.box.pack_start(self.scale_profile, False, False, 0)
 
         # -- Délais hypridle --
-        self.lbl_lock = self._add_delay("  Verrouillage", LOCK)
-        self.lbl_dpms = self._add_delay("󰛧  Extinction écran", DPMS)
-        self.lbl_susp = self._add_delay("  Mise en veille", SUSPEND)
+        idle = self.add_card("Après inactivité")
+        self.lbl_lock = self._add_delay(idle, self.IC_LOCK,
+                                        "Verrouillage", LOCK)
+        self.lbl_dpms = self._add_delay(idle, self.IC_SCREEN,
+                                        "Extinction écran", DPMS)
+        self.lbl_susp = self._add_delay(idle, self.IC_SLEEP,
+                                        "Mise en veille", SUSPEND)
 
     # ---- Profil ----
 
@@ -152,7 +168,7 @@ class BatteryPopup(LayerPopup):
         return next((i for i, (pid, _) in enumerate(PROFILES) if pid == cur), 1)
 
     def _set_profile_label(self, idx):
-        self.lbl_profile.set_markup("<b>  Profil — %s</b>" % PROFILES[idx][1])
+        self.lbl_profile.set_text(PROFILES[idx][1])
 
     def _on_profile_changed(self, scale):
         idx = int(round(scale.get_value()))
@@ -163,10 +179,7 @@ class BatteryPopup(LayerPopup):
 
     # ---- Délais ----
 
-    def _add_delay(self, title, marker):
-        lbl = Gtk.Label(xalign=0)
-        self.box.pack_start(lbl, False, False, 0)
-
+    def _add_delay(self, card, icon, title, marker):
         scale = Gtk.Scale.new_with_range(
             Gtk.Orientation.HORIZONTAL, 0, JAMAIS, 1)
         scale.set_draw_value(False)
@@ -175,21 +188,18 @@ class BatteryPopup(LayerPopup):
 
         idx = get_timeout_index(marker)
         scale.set_value(idx)
-        self._set_delay_label(lbl, title, idx)
-        scale.connect("value-changed", self._on_delay_changed, marker, title, lbl)
-        self.box.pack_start(scale, False, False, 0)
+        _row, lbl = card.slider(icon, title, scale, self._delay_text(idx))
+        scale.connect("value-changed", self._on_delay_changed, marker, lbl)
         return lbl
 
-    def _set_delay_label(self, lbl, title, idx):
-        if idx >= JAMAIS:
-            lbl.set_markup("<b>%s — Jamais</b>" % title)
-        else:
-            lbl.set_markup("<b>%s — %d min</b>" % (title, DURATIONS[idx]))
+    @staticmethod
+    def _delay_text(idx):
+        return "Jamais" if idx >= JAMAIS else "%d min" % DURATIONS[idx]
 
-    def _on_delay_changed(self, scale, marker, title, lbl):
+    def _on_delay_changed(self, scale, marker, lbl):
         idx = int(round(scale.get_value()))
         minutes = 0 if idx >= JAMAIS else DURATIONS[idx]
-        self._set_delay_label(lbl, title, idx)
+        lbl.set_text(self._delay_text(idx))
         set_timeout(marker, minutes)
         self._schedule_reload()
 

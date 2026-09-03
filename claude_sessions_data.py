@@ -23,6 +23,7 @@ Trois entretiens sont faits à chaque lecture :
     « idle » : si l'utilisateur la regarde, la réponse est considérée comme lue et
     elle cesse de réclamer son attention.
 """
+import glob
 import json
 import os
 import subprocess
@@ -166,14 +167,25 @@ def transcript_path(session):
 
     Claude Code range les transcripts sous ~/.claude/projects/<cwd encodé>/
     <session_id>.jsonl — l'encodage remplace les séparateurs par des tirets.
+
+    Le cwd ne suffit pas : c'est le répertoire de *lancement* qui nomme le
+    dossier, or les hooks rapportent le répertoire courant. Une session
+    démarrée dans ~/projects/foo puis descendue dans foo/code/bar cherchait
+    son transcript sous `-home-...-foo-code-bar` et ne trouvait rien — elle
+    s'affichait alors sans titre, sans contexte et sans dernier prompt. Le
+    session_id étant unique, on le retrouve par balayage quand le chemin
+    direct échoue.
     """
-    cwd = session.get("cwd") or ""
     sid = session.get("session_id") or ""
-    if not cwd or not sid:
+    if not sid:
         return None
-    encoded = cwd.replace("/", "-")
-    path = os.path.join(PROJECTS_DIR, encoded, f"{sid}.jsonl")
-    return path if os.path.exists(path) else None
+    cwd = session.get("cwd") or ""
+    if cwd:
+        path = os.path.join(PROJECTS_DIR, cwd.replace("/", "-"), f"{sid}.jsonl")
+        if os.path.exists(path):
+            return path
+    found = glob.glob(os.path.join(PROJECTS_DIR, "*", f"{sid}.jsonl"))
+    return found[0] if found else None
 
 
 def _tail_lines(path, max_bytes):
@@ -307,9 +319,7 @@ def _enrich_all(sessions):
         s.update({f"git_{k}": v for k, v in git_cache[cwd].items()})
 
         path = transcript_path(s)
-        if not path:
-            continue
-        info = read_transcript(path)
+        info = read_transcript(path) if path else {}
         s["title"] = info.get("title") or ""
         s["last_prompt"] = info.get("last_prompt") or ""
         s["model"] = info.get("model") or ""

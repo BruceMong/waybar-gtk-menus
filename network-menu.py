@@ -37,7 +37,8 @@ try:                                    # GLib.unix_signal_add est déprécié
 except (ValueError, ImportError):       # PyGObject plus ancien
     unix_signal_add = GLib.unix_signal_add
 
-from menu_common import LayerPopup  # noqa: E402
+from menu_common import (Card, LayerPopup,  # noqa: E402
+                         caption_label, custom_row)
 
 DEVNULL = subprocess.DEVNULL
 
@@ -205,10 +206,27 @@ def notify(icon, title, body):
 
 
 class NetworkPopup(LayerPopup):
+    """Une carte par question : l'antenne, les réseaux, les outils.
+
+    La liste des réseaux est elle-même une carte, reconstruite à chaque scan.
+    C'est ce qui la distingue enfin des actions du bas : avant, réseaux et
+    boutons de dépannage formaient une seule colonne de rectangles identiques,
+    et rien ne disait où finissait l'un et où commençait l'autre.
+    """
+
+    IC_WIFI = "\U000f05a9"      # antenne
+    IC_REFRESH = "\U000f0453"   # flèches circulaires
+    # Les glyphes de la plage E7xx (icônes « dev ») sont dessinés pour une
+    # barre de statut : dans une colonne d'icônes de 22 px ils se lisent comme
+    # des taches. On reste sur les Material Design, plus nets à cette taille.
+    IC_GUI = "\U000f0493"       # engrenage
+    IC_TUI = "\U000f018d"       # console
+    IC_RESTART = "\U000f0709"   # redémarrage du service
+    IC_DRIVER = "\U000f0a0b"    # puce : le pilote, pas un simple rafraîchissement
+    IC_LOCK = "\U000f0341"      # cadenas
+
     def __init__(self):
         super().__init__("Wi-Fi", width=360, margin_right=110)
-        # Accent bleu au lieu du peche : plus lisible dans la liste des reseaux.
-        self.get_style_context().add_class("blue")
         self.iface = ""
         self._closed = False
         self._scan_gen = 0       # invalide les scans dont le résultat arrive tard
@@ -222,35 +240,30 @@ class NetworkPopup(LayerPopup):
         self.connect("destroy", self._on_destroy)
 
         # -- Interrupteur Wi-Fi --
-        row = Gtk.Box(spacing=8)
-        lbl = Gtk.Label(xalign=0)
-        lbl.set_markup("<b>  Wi-Fi</b>")
-        row.pack_start(lbl, True, True, 0)
-        self.sw = Gtk.Switch()
-        self.sw.set_valign(Gtk.Align.CENTER)
-        self.sw.connect("notify::active", self._on_radio)
-        row.pack_end(self.sw, False, False, 0)
-        self.box.pack_start(row, False, False, 0)
+        radio = self.add_card()
+        self.sw = radio.toggle(self.IC_WIFI, "Wi-Fi", False, self._on_radio)
 
         # -- Bandeau d'état (scan / connexion / erreur) --
         self.status_box = Gtk.Box(spacing=8)
         self.status_box.set_no_show_all(True)
+        self.status_box.set_margin_start(4)
         self.spinner = Gtk.Spinner()
         self.spinner.set_valign(Gtk.Align.CENTER)
         self.status_box.pack_start(self.spinner, False, False, 0)
-        self.status_label = Gtk.Label(xalign=0)
-        self.status_label.set_line_wrap(True)
-        self.status_label.set_max_width_chars(38)
+        self.status_label = caption_label("", width_chars=38)
         self.status_box.pack_start(self.status_label, True, True, 0)
         self.box.pack_start(self.status_box, False, False, 0)
 
         # -- Liste scrollable des réseaux --
+        # Le conteneur reste en place d'un scan à l'autre ; c'est la carte
+        # qu'il porte qui est reconstruite, pour ne pas faire clignoter la
+        # barre de défilement à chaque rafraîchissement passif.
         self.scroller = Gtk.ScrolledWindow()
         self.scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.scroller.set_min_content_height(120)
-        self.scroller.set_max_content_height(280)
+        self.scroller.set_max_content_height(300)
         self.scroller.set_propagate_natural_height(True)
-        self.net_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.net_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.scroller.add(self.net_box)
         self.box.pack_start(self.scroller, True, True, 0)
 
@@ -262,6 +275,7 @@ class NetworkPopup(LayerPopup):
         self.act_box.set_no_show_all(True)
         self.act_label = Gtk.Label(xalign=0)
         self.act_label.set_ellipsize(Pango.EllipsizeMode.END)
+        self.act_label.get_style_context().add_class("section-title")
         self.act_box.pack_start(self.act_label, False, False, 0)
         self.act_btns = Gtk.Box(spacing=8, homogeneous=True)
         self.act_box.pack_start(self.act_btns, False, False, 0)
@@ -270,8 +284,7 @@ class NetworkPopup(LayerPopup):
         # -- Saisie mot de passe (cachée par défaut) --
         self.pw_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self.pw_box.set_no_show_all(True)
-        self.pw_label = Gtk.Label(xalign=0)
-        self.pw_label.set_line_wrap(True)
+        self.pw_label = caption_label("")
         self.pw_box.pack_start(self.pw_label, False, False, 0)
         self.pw_entry = Gtk.Entry()
         self.pw_entry.set_visibility(False)
@@ -289,24 +302,24 @@ class NetworkPopup(LayerPopup):
         self.pw_box.pack_start(pw_btns, False, False, 0)
         self.box.pack_start(self.pw_box, False, False, 0)
 
-        # -- Rafraîchir --
-        self.refresh_btn = Gtk.Button(label="󰑓  Rafraîchir")
-        self.refresh_btn.connect("clicked", self._on_refresh)
-        self.box.pack_start(self.refresh_btn, False, False, 0)
+        # -- Rafraîchir et outils --
+        tools = self.add_card()
+        self.refresh_row = tools.action(self.IC_REFRESH, "Rafraîchir",
+                                        on_click=self._on_refresh)
+        tools.action(self.IC_GUI, "Connexions", value="GUI", chevron=True,
+                     on_click=self._open_gui)
+        tools.action(self.IC_TUI, "nmtui", chevron=True,
+                     on_click=self._open_nmtui)
 
-        # -- Actions --
-        self.box.pack_start(Gtk.Separator(), False, False, 0)
-        self.driver_btn = None
-        for label, handler in (
-            ("  Connexions (GUI)", self._open_gui),
-            ("  nmtui", self._open_nmtui),
-            ("󰜉  Redémarrer NetworkManager", self._restart_nm),
-            ("󰑓  Recharger driver Wi-Fi", self._reload_driver),
-        ):
-            btn = Gtk.Button(label=label)
-            btn.connect("clicked", handler)
-            self.box.pack_start(btn, False, False, 0)
-            self.driver_btn = btn  # dernier de la liste
+        # -- Dépannage --
+        # Séparé du reste : ces deux actions coupent le réseau le temps de
+        # repartir. Les mêler aux raccourcis ci-dessus revenait à les proposer
+        # avec le même entrain qu'« ouvrir nmtui ».
+        fix = self.add_card("Dépannage")
+        fix.action(self.IC_RESTART, "Redémarrer NetworkManager",
+                   on_click=self._restart_nm)
+        self.driver_row = fix.action(self.IC_DRIVER, "Recharger le driver Wi-Fi",
+                                     on_click=self._reload_driver)
 
         # Le cache de NetworkManager répond en ~20 ms : on l'affiche tout de
         # suite, puis le rescan complet (~7 s) met la liste à jour en fond.
@@ -344,8 +357,6 @@ class NetworkPopup(LayerPopup):
         markup = GLib.markup_escape_text(text)
         if error:
             markup = "<span foreground='#ff6961'>%s</span>" % markup
-        else:
-            markup = "<i>%s</i>" % markup
         self.status_label.set_markup(markup)
         reveal(self.status_box)
         if busy:
@@ -360,7 +371,7 @@ class NetworkPopup(LayerPopup):
         self._busy = busy
         self.net_box.set_sensitive(not busy)
         self.sw.set_sensitive(not busy)
-        self.refresh_btn.set_sensitive(not busy and not self._scanning)
+        self.refresh_row.set_sensitive(not busy and not self._scanning)
 
     def _set_scanning(self, scanning):
         """Scan en cours : seul « Rafraîchir » se verrouille.
@@ -370,7 +381,7 @@ class NetworkPopup(LayerPopup):
         cache sont déjà affichés et parfaitement cliquables.
         """
         self._scanning = scanning
-        self.refresh_btn.set_sensitive(not scanning and not self._busy)
+        self.refresh_row.set_sensitive(not scanning and not self._busy)
 
     # ---- Scan ----
 
@@ -400,8 +411,11 @@ class NetworkPopup(LayerPopup):
             if first:
                 self.iface = res.get("iface", "")
                 drv = res.get("driver", "")
-                if drv and self.driver_btn is not None:
-                    self.driver_btn.set_label("󰑓  Recharger driver Wi-Fi (%s)" % drv)
+                if drv:
+                    # Le nom du pilote est une précision, pas le libellé de
+                    # l'action : il descend en valeur, à droite de la ligne.
+                    self.driver_row.value_label.set_text(drv)
+                    self.driver_row.value_label.set_visible(True)
             self._apply_state(res)
             if then_rescan:
                 self._start_scan(rescan=True)
@@ -462,35 +476,29 @@ class NetworkPopup(LayerPopup):
             return
 
         known = state["known"]
+        card = Card()
         restore = None
         for ssid, level, secured, active in state["nets"]:
-            btn = Gtk.Button()
-            btn._ssid = ssid
-            if active:
-                btn.get_style_context().add_class("accent")
-            inner = Gtk.Box(spacing=8)
-            left = Gtk.Label(xalign=0)
-            left.set_ellipsize(Pango.EllipsizeMode.END)
-            lock = "  󰍁" if secured else ""
-            check = " " if active else ""
+            # Le gras signale un profil enregistré — une nuance, pas une
+            # étiquette : un sous-titre « Enregistré » sur la moitié des
+            # lignes doublerait leur hauteur pour une information que l'infobulle
+            # donne déjà.
             name = GLib.markup_escape_text(ssid)
             if ssid in known:
-                name = "<b>%s</b>" % name      # profil enregistré
-            left.set_markup("%s%s  %s%s" % (
-                check, signal_icon(level), name, lock))
-            inner.pack_start(left, True, True, 0)
-            pct = Gtk.Label(label="%d%%" % level, xalign=1)
-            inner.pack_end(pct, False, False, 0)
-            btn.add(inner)
-            btn.set_tooltip_text(
-                "Connecté — clic droit : se déconnecter" if active else
-                ("Réseau enregistré — clic droit : oublier le profil" if ssid in known
-                 else "Cliquer pour se connecter"))
-            btn.connect("clicked", self._on_net_clicked, ssid, secured)
-            btn.connect("button-press-event", self._on_net_button, ssid)
-            self.net_box.pack_start(btn, False, False, 0)
+                name = "<b>%s</b>" % name
+            value = "%s %d %%" % (self.IC_LOCK if secured else " ", level)
+            row = card.action(
+                signal_icon(level), name, markup=True, value=value,
+                selected=active,
+                tooltip=("Connecté — clic droit : se déconnecter" if active else
+                         ("Réseau enregistré — clic droit : oublier le profil"
+                          if ssid in known else "Cliquer pour se connecter")))
+            row._ssid = ssid
+            row.connect("clicked", self._on_net_clicked, ssid, secured)
+            row.connect("button-press-event", self._on_net_button, ssid)
             if ssid == focus_ssid:
-                restore = btn
+                restore = row
+        self.net_box.pack_start(card, False, False, 0)
         self.net_box.show_all()
         if restore is not None:
             restore.grab_focus()
@@ -498,9 +506,10 @@ class NetworkPopup(LayerPopup):
             GLib.idle_add(lambda: (adj.set_value(scroll), False)[1])
 
     def _placeholder(self, text):
-        info = Gtk.Label(xalign=0)
-        info.set_markup("<i>%s</i>" % GLib.markup_escape_text(text))
-        self.net_box.pack_start(info, False, False, 0)
+        """Carte d'une seule ligne : la liste vide garde la forme d'une liste."""
+        card = Card()
+        card.add_row(custom_row(caption_label(text)))
+        self.net_box.pack_start(card, False, False, 0)
         self.net_box.show_all()
 
     # ---- Handlers réseau ----

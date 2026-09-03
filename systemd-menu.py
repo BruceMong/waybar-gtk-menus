@@ -17,10 +17,18 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib  # noqa: E402
 
-from menu_common import LayerPopup  # noqa: E402
+from menu_common import (Card, LayerPopup,  # noqa: E402
+                         caption_label, control_row, custom_row)
 
 DEVNULL = subprocess.DEVNULL
 TERM_CLASS = "journal-view"
+OK_CSS = """
+.row-label.ok { color: #32d74b; }
+.row-icon.ok  { color: #32d74b; }
+/* Une ligne rendue inerte reste lisible : ici l'insensibilité ne signale pas
+   une action indisponible, mais une ligne qui n'est qu'un constat. */
+.row:disabled .row-label.ok, .row:disabled .row-icon.ok { color: #32d74b; }
+""".encode()
 # Au-delà, le presse-papier devient impossible à relire : on tronque.
 REPORT_MAX = 16000
 
@@ -205,8 +213,26 @@ def copy_to_clipboard(text):
 
 
 class SystemdPopup(LayerPopup):
+    """Une carte par unité en échec : le diagnostic et ses issues d'un bloc.
+
+    Les unités s'enchaînaient auparavant séparées par un simple filet, chacune
+    étalant nom, description, extrait de journal et quatre boutons sur toute
+    la largeur — sur deux unités, on ne savait plus quel bouton appartenait à
+    laquelle. La carte répond à cette question sans qu'on ait à la poser.
+    """
+
+    IC_FAILED = "\U000f0026"    # alerte
+    IC_OK = "\U000f012c"        # coche
+    IC_COPY = "\U000f018f"      # copier
+    IC_ACK = "\U000f012c"       # acquitter
+
     def __init__(self):
         super().__init__("Unités en échec", width=420, margin_right=210)
+        provider = Gtk.CssProvider()
+        provider.load_from_data(OK_CSS)
+        Gtk.StyleContext.add_provider_for_screen(
+            self.get_screen(), provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
         self.content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self.box.pack_start(self.content, True, True, 0)
         self._build()
@@ -219,48 +245,46 @@ class SystemdPopup(LayerPopup):
 
         units = failed_units()
         if not units:
-            lbl = Gtk.Label(xalign=0)
-            lbl.set_markup("<span foreground='#32d74b'>  "
-                           "Aucune unité en échec</span>")
-            self.content.pack_start(lbl, False, False, 0)
+            card = Card()
+            row = card.action(self.IC_OK, "Aucune unité en échec")
+            row.title_label.get_style_context().add_class("ok")
+            row.icon_label.get_style_context().add_class("ok")
+            row.set_sensitive(False)
+            self.content.pack_start(card, False, False, 0)
             self.content.show_all()
             return
 
         for scope, unit, desc in units:
-            self.content.pack_start(self._unit_row(scope, unit, desc),
+            self.content.pack_start(self._unit_card(scope, unit, desc),
                                     False, False, 0)
 
         if len(units) > 1:
-            btn = Gtk.Button(label="  Tout acquitter")
-            btn.connect("clicked", lambda *_: self._reset_all(units))
-            self.content.pack_start(btn, False, False, 0)
-
-            copy_all = Gtk.Button(label="󰆏  Copier tous les rapports")
-            copy_all.connect("clicked",
-                             lambda b, u=units: self._copy_all(b, u))
-            self.content.pack_start(copy_all, False, False, 0)
+            card = Card()
+            card.action(self.IC_ACK, "Tout acquitter",
+                        on_click=lambda *_: self._reset_all(units))
+            row = card.action(self.IC_COPY, "Copier tous les rapports")
+            row.connect("clicked", lambda b, u=units: self._copy_all(b, u))
+            self.content.pack_start(card, False, False, 0)
 
         self.content.show_all()
 
-    def _unit_row(self, scope, unit, desc):
-        frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+    def _unit_card(self, scope, unit, desc):
+        card = Card()
 
+        # -- En-tête : le nom de l'unité, sa portée, ce qu'elle fait --
+        head = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         title = Gtk.Label(xalign=0)
-        tag = "system" if scope == "system" else "user"
         title.set_markup(
             "<b><span foreground='#ff453a'>%s</span></b>"
-            "  <span foreground='#68686f' size='small'>%s</span>"
-            % (GLib.markup_escape_text(unit), tag))
+            "  <span foreground='rgba(235,235,245,0.4)' size='small'>%s</span>"
+            % (GLib.markup_escape_text(unit), scope))
         title.set_line_wrap(True)
-        frame.pack_start(title, False, False, 0)
-
+        head.pack_start(title, False, False, 0)
         if desc:
-            lbl = Gtk.Label(xalign=0)
-            lbl.set_markup("<span foreground='#9a9aa2' size='small'>%s</span>"
-                           % GLib.markup_escape_text(desc))
-            lbl.set_line_wrap(True)
-            frame.pack_start(lbl, False, False, 0)
+            head.pack_start(caption_label(desc, width_chars=44), False, False, 0)
+        card.add_row(control_row(self.IC_FAILED, head))
 
+        # -- Extrait de journal : la cause probable, telle quelle --
         err = unit_error(scope, unit)
         if err:
             lbl = Gtk.Label(xalign=0)
@@ -269,29 +293,25 @@ class SystemdPopup(LayerPopup):
             lbl.set_line_wrap(True)
             lbl.set_max_width_chars(52)
             lbl.set_selectable(True)
-            frame.pack_start(lbl, False, False, 0)
+            card.custom(lbl)
 
+        # -- Les trois gestes courants, côte à côte : ils se comparent --
         actions = Gtk.Box(spacing=8, homogeneous=True)
         for label, handler in (
                 ("󰋼  Journal", self._journal),
                 ("󰑐  Relancer", self._restart),
-                ("  Acquitter", self._reset)):
+                ("  Acquitter", self._reset)):
             btn = Gtk.Button(label=label)
             btn.connect("clicked",
                         lambda _b, h=handler, s=scope, u=unit: h(s, u))
             actions.pack_start(btn, True, True, 0)
-        frame.pack_start(actions, False, False, 0)
+        card.custom(actions)
 
-        # Rangée dédiée : le rapport complet est plus qu'un simple « copier »,
-        # il mérite un bouton pleine largeur et un libellé explicite.
-        copy_btn = Gtk.Button(label="󰆏  Copier le rapport de diagnostic")
-        copy_btn.connect("clicked",
-                         lambda b, s=scope, u=unit: self._copy_report(b, s, u))
-        frame.pack_start(copy_btn, False, False, 0)
-
-        sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        frame.pack_start(sep, False, False, 0)
-        return frame
+        # -- Le rapport complet : plus qu'un « copier », il mérite sa ligne --
+        row = card.action(self.IC_COPY, "Copier le rapport de diagnostic")
+        row.connect("clicked",
+                    lambda b, s=scope, u=unit: self._copy_report(b, s, u))
+        return card
 
     # ---- Actions ----
 
@@ -312,22 +332,25 @@ class SystemdPopup(LayerPopup):
         report = "\n\n\n".join(error_report(sc, un) for sc, un, _d in units)
         self._copied_feedback(button, copy_to_clipboard(report))
 
-    def _copied_feedback(self, button, ok):
-        """Confirme la copie dans le bouton lui-même, puis rend son libellé.
+    def _copied_feedback(self, row, ok):
+        """Confirme la copie dans la ligne elle-même, puis rend son libellé.
 
         Une notification par-dessus la popup lui ferait perdre le focus, donc
-        la fermerait : le retour visuel reste à l'intérieur du bouton.
+        la fermerait : le retour visuel reste à l'intérieur de la ligne.
         """
-        if getattr(button, "_orig_label", None) is None:
-            button._orig_label = button.get_label()
-        button.set_label("󰄬  Copié dans le presse-papier" if ok
-                         else "󰀦  Échec de la copie (wl-copy absent ?)")
-        button.set_sensitive(False)
+        label = row.title_label
+        if getattr(row, "_orig_label", None) is None:
+            row._orig_label = label.get_text()
+        label.set_text("Copié dans le presse-papier" if ok
+                       else "Échec de la copie (wl-copy absent ?)")
+        row.icon_label.set_text("\U000f012c" if ok else "\U000f0026")
+        row.set_sensitive(False)
 
         def restore():
-            if button.get_parent() is not None:
-                button.set_label(button._orig_label)
-                button.set_sensitive(True)
+            if row.get_parent() is not None:
+                label.set_text(row._orig_label)
+                row.icon_label.set_text(self.IC_COPY)
+                row.set_sensitive(True)
             return False
 
         GLib.timeout_add(1800, restore)

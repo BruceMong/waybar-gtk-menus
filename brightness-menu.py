@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Popup luminosité + température couleur (hyprsunset) pour Waybar."""
+"""Popup luminosité + température couleur (hyprsunset) pour Waybar.
+
+Ce popup dupliquait toute la mécanique de menu_common — layer-shell, visual
+RGBA, fermeture au clic dehors, feuille de style — dans une copie qui avait
+divergé depuis. Il en hérite désormais, ce qui l'aligne d'office sur les
+autres menus et retire cent cinquante lignes qu'il fallait maintenir en
+double.
+"""
 
 import subprocess
 import os
@@ -8,363 +15,150 @@ import re
 import gi
 
 gi.require_version("Gtk", "3.0")
-gi.require_version("Gdk", "3.0")
-gi.require_version("GtkLayerShell", "0.1")
-from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
+from gi.repository import Gtk, GLib  # noqa: E402
 
-from menu_common import detach_pointer_focus, restore_pointer_focus
+from menu_common import LayerPopup  # noqa: E402
 
 TEMP_FILE = os.path.expanduser("~/.cache/hyprsunset-temp")
 KBD_DEVICE = "tpacpi::kbd_backlight"
 KITTY_CONF = os.path.expanduser("~/.config/kitty/kitty.conf")
-CHROME_OPACITY_CONF = os.path.expanduser("~/.config/hypr/chrome-opacity.conf")
-PIP_OPACITY_CONF = os.path.expanduser("~/.config/hypr/pip-opacity.conf")
+CHROME_OPACITY_CONF = os.path.expanduser("~/.config/hypr/chrome-opacity.lua")
+PIP_OPACITY_CONF = os.path.expanduser("~/.config/hypr/pip-opacity.lua")
 
 PIP_RULE_TEMPLATE = """\
-# Opacite PiP — geree par le slider du menu luminosite Waybar.
-# Ne pas editer a la main : la valeur opacity est reecrite par brightness-menu.py.
-windowrule {{
-    name = pip-opacity
-    match:title = (?i)picture.in.picture
+-- Opacite PiP — geree par le slider du menu luminosite Waybar.
+-- Ne pas editer a la main : la valeur opacity est reecrite par brightness-menu.py.
+hl.window_rule({{
+    name  = "pip-opacity",
+    match = {{ title = "(?i)picture.in.picture" }},
 
-    opacity = {value} {value}
-}}
+    opacity = "{value} {value}",
+}})
 """
 
 CHROME_RULE_ON = """\
-# Transparence Chrome — gere par le menu luminosite Waybar (switch on/off).
-# Etat : ACTIF
-windowrule {
-    name = chrome-opacity
-    match:class = google-chrome
+-- Transparence Chrome — gere par le menu luminosite Waybar (switch on/off).
+-- Etat : ACTIF
+hl.window_rule({
+    name  = "chrome-opacity",
+    match = { class = "google-chrome" },
 
-    opacity = 0.95 0.90
-}
+    opacity = "0.95 0.90",
+})
 """
 
 CHROME_RULE_OFF = """\
-# Transparence Chrome — gere par le menu luminosite Waybar (switch on/off).
-# Etat : INACTIF
+-- Transparence Chrome — gere par le menu luminosite Waybar (switch on/off).
+-- Etat : INACTIF
 """
 
 
-class BrightnessPopup(Gtk.Window):
+KBD_LABELS = ["Éteint", "Faible", "Fort"]
+
+# Glyphes de la colonne d'icônes (Material Design de la Nerd Font).
+IC_SCREEN = "\U000f00e0"     # soleil
+IC_KEYBOARD = "\U000f030c"   # clavier
+IC_NIGHT = "\U000f0594"      # lune
+IC_TEMP = "\U000f050f"       # thermomètre
+IC_TERM = "\U000f018d"       # console
+IC_PIP = "\U000f0567"        # vidéo
+IC_CHROME = "\U000f02af"     # navigateur
+IC_DARK = "\U000f0821"       # bascule clair / sombre
+
+
+class BrightnessPopup(LayerPopup):
+    """Quatre cartes : l'écran, la lumière du soir, la transparence, le thème.
+
+    Sept réglages se suivaient auparavant en une seule colonne de libellés et
+    de curseurs, sans que rien ne dise que l'opacité de Kitty et celle du PiP
+    règlent la même chose, ni que le curseur de température ne sert à rien
+    tant que son interrupteur est éteint.
+    """
+
     def __init__(self):
-        super().__init__(title="Luminosité & Couleur")
+        super().__init__("Luminosité & Couleur", width=340, margin_right=150)
 
-        # Utiliser gtk-layer-shell pour être sur le layer overlay (au-dessus de Waybar)
-        GtkLayerShell.init_for_window(self)
-        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
-        # ON_DEMAND et pas EXCLUSIVE : en exclusif Hyprland réserve aussi le
-        # pointeur au client du layer, et plus aucun clic n'atteint les
-        # fenêtres du dessous tant que le popup est ouvert.
-        GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.ON_DEMAND)
-        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
-        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.RIGHT, True)
-        GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, 40)
-        GtkLayerShell.set_margin(self, GtkLayerShell.Edge.RIGHT, 150)
-
-        # Namespace dédié, visé par le bloc `layerrule` waybar-popup dans
-        # hyprland.conf. Le visual RGBA est ce qui permet à l'alpha du fond
-        # d'exister : sans lui GTK l'aplatit sur du noir, et les coins
-        # arrondis laissent des angles noirs.
-        GtkLayerShell.set_namespace(self, "waybar-popup")
-        _visual = Gdk.Screen.get_default().get_rgba_visual()
-        if _visual is not None:
-            self.set_visual(_visual)
-
-        self.set_default_size(340, 300)
-        self.set_resizable(False)
-
-        self.connect("key-press-event", self._on_key)
-
-        # Fermeture au clic dehors sans surface de capture : une fenêtre
-        # transparente plein écran avalerait le clic, que la fenêtre visée
-        # derrière ne recevrait jamais. On ferme sur perte du focus clavier,
-        # que seul un clic provoque grâce à detach_pointer_focus().
-        detach_pointer_focus()
-        self._had_focus = False
-        self._close_src = 0
-        self.connect("notify::has-toplevel-focus", self._on_focus_change)
-        self.connect("destroy", lambda *_: restore_pointer_focus())
-
-        self._apply_css()
-
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        box.set_margin_top(16)
-        box.set_margin_bottom(16)
-        box.set_margin_start(20)
-        box.set_margin_end(20)
-
-        # -- En-tête : titre + bouton fermer --
-        hbox_header = Gtk.Box(spacing=8)
-        lbl_title = Gtk.Label(xalign=0)
-        lbl_title.set_markup("<b>Luminosité &amp; Couleur</b>")
-        hbox_header.pack_start(lbl_title, True, True, 0)
-
-        btn_close = Gtk.Button(label="✕")
-        btn_close.set_relief(Gtk.ReliefStyle.NONE)
-        btn_close.set_valign(Gtk.Align.CENTER)
-        btn_close.get_style_context().add_class("close-btn")
-        btn_close.connect("clicked", lambda *_: self.close())
-        hbox_header.pack_end(btn_close, False, False, 0)
-        box.pack_start(hbox_header, False, False, 0)
-
-        # -- Luminosité --
-        lbl_bright = Gtk.Label(xalign=0)
-        lbl_bright.set_markup("<b>  Luminosité</b>")
-        box.pack_start(lbl_bright, False, False, 0)
-
-        self.scale_bright = Gtk.Scale.new_with_range(
-            Gtk.Orientation.HORIZONTAL, 1, 100, 5
-        )
-        self.scale_bright.set_value(self._get_brightness())
-        self.scale_bright.set_value_pos(Gtk.PositionType.RIGHT)
-        self.scale_bright.set_digits(0)
-        self.scale_bright.connect("value-changed", self._on_brightness_changed)
-        box.pack_start(self.scale_bright, False, False, 0)
-
-        # -- Rétroéclairage clavier --
-        lbl_kbd = Gtk.Label(xalign=0)
-        lbl_kbd.set_markup("<b>  Clavier</b>")
-        box.pack_start(lbl_kbd, False, False, 0)
-
-        self.scale_kbd = Gtk.Scale.new_with_range(
-            Gtk.Orientation.HORIZONTAL, 0, 2, 1
-        )
-        self.scale_kbd.set_value(self._get_kbd_brightness())
-        self.scale_kbd.set_value_pos(Gtk.PositionType.RIGHT)
-        self.scale_kbd.set_digits(0)
-        self.scale_kbd.add_mark(0, Gtk.PositionType.BOTTOM, "Off")
-        self.scale_kbd.add_mark(1, Gtk.PositionType.BOTTOM, "Faible")
-        self.scale_kbd.add_mark(2, Gtk.PositionType.BOTTOM, "Fort")
-        self.scale_kbd.connect("value-changed", self._on_kbd_changed)
-        box.pack_start(self.scale_kbd, False, False, 0)
-
-        # -- Opacité Kitty --
-        lbl_opacity = Gtk.Label(xalign=0)
-        lbl_opacity.set_markup("<b>  Opacité Kitty</b>")
-        box.pack_start(lbl_opacity, False, False, 0)
-
-        self.scale_opacity = Gtk.Scale.new_with_range(
-            Gtk.Orientation.HORIZONTAL, 30, 100, 5
-        )
-        self.scale_opacity.set_value(self._get_kitty_opacity())
-        self.scale_opacity.set_value_pos(Gtk.PositionType.RIGHT)
-        self.scale_opacity.set_digits(0)
-        self.scale_opacity.add_mark(30, Gtk.PositionType.BOTTOM, "Transparent")
-        self.scale_opacity.add_mark(100, Gtk.PositionType.BOTTOM, "Opaque")
-        self.scale_opacity.connect("value-changed", self._on_kitty_opacity_changed)
-        box.pack_start(self.scale_opacity, False, False, 0)
-
-        # -- Opacité PiP (windowrule Hyprland, titre "Picture in picture") --
-        lbl_pip = Gtk.Label(xalign=0)
-        lbl_pip.set_markup("<b>󰕧  Opacité PiP</b>")
-        box.pack_start(lbl_pip, False, False, 0)
-
-        self.scale_pip = Gtk.Scale.new_with_range(
-            Gtk.Orientation.HORIZONTAL, 20, 100, 5
-        )
-        self.scale_pip.set_value(self._get_pip_opacity())
-        self.scale_pip.set_value_pos(Gtk.PositionType.RIGHT)
-        self.scale_pip.set_digits(0)
-        self.scale_pip.add_mark(20, Gtk.PositionType.BOTTOM, "Transparent")
-        self.scale_pip.add_mark(100, Gtk.PositionType.BOTTOM, "Opaque")
-        self.scale_pip.connect("value-changed", self._on_pip_opacity_changed)
-        box.pack_start(self.scale_pip, False, False, 0)
-
-        # -- Transparence Chrome (windowrule Hyprland) --
-        hbox_chrome = Gtk.Box(spacing=8)
-        lbl_chrome = Gtk.Label(xalign=0)
-        lbl_chrome.set_markup("<b>  Transparence Chrome</b>")
-        hbox_chrome.pack_start(lbl_chrome, True, True, 0)
-
-        self.switch_chrome = Gtk.Switch()
-        self.switch_chrome.set_valign(Gtk.Align.CENTER)
-        self.switch_chrome.set_active(self._is_chrome_transparent())
-        self.switch_chrome.connect("notify::active", self._on_chrome_toggled)
-        hbox_chrome.pack_end(self.switch_chrome, False, False, 0)
-        box.pack_start(hbox_chrome, False, False, 0)
-
-        # -- Mode sombre (prefer-color-scheme) --
-        hbox_dark = Gtk.Box(spacing=8)
-        lbl_dark = Gtk.Label(xalign=0)
-        lbl_dark.set_markup("<b>󰖔  Mode sombre</b>")
-        hbox_dark.pack_start(lbl_dark, True, True, 0)
-
-        self.switch_dark = Gtk.Switch()
-        self.switch_dark.set_valign(Gtk.Align.CENTER)
-        self.switch_dark.set_active(self._is_dark_mode())
-        self.switch_dark.connect("notify::active", self._on_dark_toggled)
-        hbox_dark.pack_end(self.switch_dark, False, False, 0)
-        box.pack_start(hbox_dark, False, False, 0)
-
-        # -- Température couleur --
-        hbox_temp = Gtk.Box(spacing=8)
-        lbl_temp = Gtk.Label(xalign=0)
-        lbl_temp.set_markup("<b>  Température</b>")
-        hbox_temp.pack_start(lbl_temp, True, True, 0)
-
-        self.switch_temp = Gtk.Switch()
-        self.switch_temp.set_valign(Gtk.Align.CENTER)
-        hbox_temp.pack_end(self.switch_temp, False, False, 0)
-        box.pack_start(hbox_temp, False, False, 0)
-
-        self.scale_temp = Gtk.Scale.new_with_range(
-            Gtk.Orientation.HORIZONTAL, 2500, 6500, 100
-        )
-        self.scale_temp.set_inverted(True)  # gauche = chaud, droite = froid
-        self.scale_temp.set_value_pos(Gtk.PositionType.RIGHT)
-        self.scale_temp.set_digits(0)
-        self.scale_temp.add_mark(2500, Gtk.PositionType.BOTTOM, "Chaud")
-        self.scale_temp.add_mark(6500, Gtk.PositionType.BOTTOM, "Froid")
-
-        current_temp = self._get_temperature()
-        if current_temp is not None:
-            self.switch_temp.set_active(True)
-            self.scale_temp.set_value(current_temp)
-            self.scale_temp.set_sensitive(True)
-        else:
-            self.switch_temp.set_active(False)
-            self.scale_temp.set_value(4500)
-            self.scale_temp.set_sensitive(False)
-
-        self.switch_temp.connect("notify::active", self._on_switch_toggled)
-        self.scale_temp.connect("value-changed", self._on_temperature_changed)
-        box.pack_start(self.scale_temp, False, False, 0)
-
-        self.add(box)
-
-        # Debounce pour hyprsunset
+        # Debounces (hyprsunset, kitty.conf, windowrule PiP) : chaque réglage
+        # écrit dans un fichier ou relance un démon, hors de question de le
+        # faire à chaque pixel de glissement.
         self._temp_timeout_id = None
-        # Debounce pour l'opacité kitty
         self._opacity_timeout_id = None
-        # Debounce pour l'opacité PiP
         self._pip_opacity_timeout_id = None
 
-    def _apply_css(self):
-        css = """
-        /* Même pile que la barre : Inter (ou Adwaita Sans, son dérivé déjà présent)
-           pour le texte, Nerd Font en queue pour les glyphes. Sans cette règle les
-           popups héritent du gtk-font-name système, ici une monospace — ce qui suffit
-           à trahir l'ensemble. */
-        window, label, button, entry, switch, scale, list, row, popover, menu {
-            font-family: "Inter", "Adwaita Sans", "SF Pro Text",
-                         "Material Symbols Rounded",
-                         "JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font",
-                         "Symbols Nerd Font", "Noto Sans Symbols 2";
-        }
-        window {
-            background-color: rgba(30, 30, 32, 0.72);
-            color: #ebebf0;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.14);
-        }
-        label {
-            color: #ebebf0;
-        }
-        scale trough {
-            background-color: rgba(255, 255, 255, 0.09);
-            border-radius: 4px;
-            min-height: 8px;
-        }
-        scale highlight {
-            background-color: #0a84ff;
-            border-radius: 4px;
-            min-height: 8px;
-        }
-        scale slider {
-            background-color: #ffffff;
-            border-radius: 50%;
-            min-width: 18px;
-            min-height: 18px;
-            margin: -5px;
-        }
-        scale value {
-            color: #9a9aa2;
-            font-size: 12px;
-        }
-        scale mark label {
-            color: #68686f;
-            font-size: 10px;
-        }
-        switch {
-            background-color: rgba(255, 255, 255, 0.09);
-            border-radius: 12px;
-            min-width: 40px;
-            min-height: 20px;
-        }
-        switch:checked {
-            background-color: #0a84ff;
-        }
-        switch slider {
-            background-color: #ffffff;
-            border-radius: 50%;
-            min-width: 16px;
-            min-height: 16px;
-        }
-        button.close-btn {
-            color: #9a9aa2;
-            background: none;
-            border: none;
-            box-shadow: none;
-            padding: 0 6px;
-            min-width: 24px;
-            min-height: 24px;
-            font-size: 14px;
-        }
-        button.close-btn:hover {
-            color: #ff453a;
-            background-color: rgba(255, 255, 255, 0.09);
-            border-radius: 6px;
-        }
-        scale:focus, button:focus, switch:focus, *:focus {
-            outline: 2px solid rgba(10, 132, 255, 0.75);
-            outline-offset: -2px;
-        }
-        """.encode()
-        provider = Gtk.CssProvider()
-        provider.load_from_data(css)
-        Gtk.StyleContext.add_provider_for_screen(
-            Gdk.Screen.get_default(),
-            provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
-        )
+        # ── Écran ──
+        screen = self.add_card("Écran")
 
-    def _on_focus_change(self, *_):
-        if self._close_src:
-            GLib.source_remove(self._close_src)
-            self._close_src = 0
-        if self.props.has_toplevel_focus:
-            self._had_focus = True
-            return
-        # Avant le premier focus, la fenêtre vient d'être mappée : rien à
-        # fermer tant que le compositeur ne lui a pas donné le clavier.
-        if not self._had_focus:
-            return
-        # Court sursis : un aller-retour de focus ne doit pas passer pour un
-        # clic en dehors.
-        self._close_src = GLib.timeout_add(150, self._close_if_unfocused)
+        bright = self._get_brightness()
+        self.scale_bright = self._make_scale(1, 100, 5, bright)
+        _r, self.lbl_bright = screen.slider(
+            IC_SCREEN, "Luminosité", self.scale_bright, "%d %%" % bright)
+        self.scale_bright.connect("value-changed", self._on_brightness_changed)
 
-    def _close_if_unfocused(self):
-        self._close_src = 0
-        if not self.props.has_toplevel_focus:
-            self.close()
-        return False
+        kbd = self._get_kbd_brightness()
+        self.scale_kbd = self._make_scale(0, 2, 1, kbd)
+        self.scale_kbd.add_mark(0, Gtk.PositionType.BOTTOM, "Éteint")
+        self.scale_kbd.add_mark(2, Gtk.PositionType.BOTTOM, "Fort")
+        _r, self.lbl_kbd = screen.slider(
+            IC_KEYBOARD, "Clavier", self.scale_kbd, KBD_LABELS[min(kbd, 2)])
+        self.scale_kbd.connect("value-changed", self._on_kbd_changed)
 
-    def _on_key(self, _widget, event):
-        kv = event.keyval
-        if kv == Gdk.KEY_Escape:
-            self.close()
-            return True
-        # Haut/bas : passer d'un curseur à l'autre. Gauche/droite : ajuster la
-        # valeur du curseur ciblé (géré nativement par Gtk.Scale).
-        if kv in (Gdk.KEY_Up, Gdk.KEY_Down):
-            direction = (Gtk.DirectionType.TAB_BACKWARD if kv == Gdk.KEY_Up
-                         else Gtk.DirectionType.TAB_FORWARD)
-            self.child_focus(direction)
-            return True
-        return False
+        # ── Lumière du soir ──
+        # L'interrupteur et le curseur qu'il commande sont dans la même carte :
+        # le curseur grisé se lit alors comme « éteint », pas comme « cassé ».
+        night = self.add_card("Lumière du soir")
+        current_temp = self._get_temperature()
+        self.switch_temp = night.toggle(IC_NIGHT, "Filtre chaud",
+                                        current_temp is not None,
+                                        self._on_switch_toggled)
+
+        self.scale_temp = self._make_scale(2500, 6500, 100,
+                                           current_temp or 4500)
+        # Inversé : glisser vers la droite réchauffe l'écran, ce qui est le sens
+        # du geste attendu — « plus de filtre ». Les marques suivent
+        # l'inversion, d'où Froid à gauche et Chaud à droite.
+        self.scale_temp.set_inverted(True)
+        self.scale_temp.add_mark(2500, Gtk.PositionType.BOTTOM, "Chaud")
+        self.scale_temp.add_mark(6500, Gtk.PositionType.BOTTOM, "Froid")
+        self.scale_temp.set_sensitive(current_temp is not None)
+        _r, self.lbl_temp = night.slider(
+            IC_TEMP, "Température", self.scale_temp,
+            "%d K" % (current_temp or 4500))
+        self.scale_temp.connect("value-changed", self._on_temperature_changed)
+
+        # ── Transparence ──
+        transp = self.add_card("Transparence")
+
+        kitty = self._get_kitty_opacity()
+        self.scale_opacity = self._make_scale(30, 100, 5, kitty)
+        _r, self.lbl_opacity = transp.slider(
+            IC_TERM, "Kitty", self.scale_opacity, "%d %%" % kitty)
+        self.scale_opacity.connect("value-changed",
+                                   self._on_kitty_opacity_changed)
+
+        pip = self._get_pip_opacity()
+        self.scale_pip = self._make_scale(20, 100, 5, pip)
+        _r, self.lbl_pip = transp.slider(
+            IC_PIP, "Picture-in-picture", self.scale_pip, "%d %%" % pip)
+        self.scale_pip.connect("value-changed", self._on_pip_opacity_changed)
+
+        self.switch_chrome = transp.toggle(IC_CHROME, "Chrome",
+                                           self._is_chrome_transparent(),
+                                           self._on_chrome_toggled)
+
+        # ── Apparence ──
+        appearance = self.add_card("Apparence")
+        self.switch_dark = appearance.toggle(IC_DARK, "Mode sombre",
+                                             self._is_dark_mode(),
+                                             self._on_dark_toggled)
+
+    @staticmethod
+    def _make_scale(lo, hi, step, value):
+        """Curseur sans valeur incrustée : elle vit dans le libellé de la ligne."""
+        scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL,
+                                         lo, hi, step)
+        scale.set_value(value)
+        scale.set_draw_value(False)
+        return scale
 
     def _get_brightness(self):
         try:
@@ -412,6 +206,7 @@ class BrightnessPopup(Gtk.Window):
         # Debounce: éviter de réécrire le fichier à chaque pixel de drag
         if self._opacity_timeout_id:
             GLib.source_remove(self._opacity_timeout_id)
+        self.lbl_opacity.set_text("%d %%" % int(scale.get_value()))
         self._opacity_timeout_id = GLib.timeout_add(
             120, self._apply_kitty_opacity, int(scale.get_value())
         )
@@ -442,14 +237,18 @@ class BrightnessPopup(Gtk.Window):
         return False
 
     def _get_pip_opacity(self):
-        """Lit la valeur opacity dans pip-opacity.conf, renvoie un pourcentage."""
+        """Lit la valeur opacity dans pip-opacity.lua, renvoie un pourcentage.
+
+        La regle est en Lua depuis la migration du 2026-09-02, donc la valeur
+        est une chaine entre guillemets : `opacity = "0.86 0.86",`.
+        """
         try:
             with open(PIP_OPACITY_CONF) as f:
                 for line in f:
                     s = line.strip()
                     if s.startswith("opacity") and "=" in s:
-                        val = s.split("=", 1)[1].split()[0]
-                        return int(round(float(val) * 100))
+                        val = s.split("=", 1)[1].strip().strip(',').strip('"')
+                        return int(round(float(val.split()[0]) * 100))
         except Exception:
             pass
         return 60
@@ -458,6 +257,7 @@ class BrightnessPopup(Gtk.Window):
         # Debounce: éviter de réécrire le fichier + reload à chaque pixel de drag
         if self._pip_opacity_timeout_id:
             GLib.source_remove(self._pip_opacity_timeout_id)
+        self.lbl_pip.set_text("%d %%" % int(scale.get_value()))
         self._pip_opacity_timeout_id = GLib.timeout_add(
             150, self._apply_pip_opacity, int(scale.get_value())
         )
@@ -470,7 +270,7 @@ class BrightnessPopup(Gtk.Window):
                 content = f.read()
             new_content, n = re.subn(
                 r"(?m)^([ \t]*opacity\s*)=.*$",
-                rf"\g<1>= {value} {value}",
+                rf'\g<1>= "{value} {value}",',
                 content,
             )
             if n == 0:
@@ -491,7 +291,11 @@ class BrightnessPopup(Gtk.Window):
         return False
 
     def _is_chrome_transparent(self):
-        """Actif si le fichier de regle contient une ligne opacity non commentee."""
+        """Actif si le fichier de regle contient une ligne opacity non commentee.
+
+        En Lua un commentaire commence par `--`, donc une ligne desactivee ne
+        commence jamais par « opacity » : le test reste valable tel quel.
+        """
         try:
             with open(CHROME_OPACITY_CONF) as f:
                 for line in f:
@@ -536,6 +340,7 @@ class BrightnessPopup(Gtk.Window):
 
     def _on_kbd_changed(self, scale):
         val = int(scale.get_value())
+        self.lbl_kbd.set_text(KBD_LABELS[min(val, 2)])
         subprocess.Popen(
             ["brightnessctl", "--device", KBD_DEVICE, "set", str(val), "-q"],
             stdout=subprocess.DEVNULL,
@@ -544,6 +349,7 @@ class BrightnessPopup(Gtk.Window):
 
     def _on_brightness_changed(self, scale):
         val = int(scale.get_value())
+        self.lbl_bright.set_text("%d %%" % val)
         subprocess.Popen(
             ["brightnessctl", "set", f"{val}%", "-q"],
             stdout=subprocess.DEVNULL,
@@ -563,6 +369,7 @@ class BrightnessPopup(Gtk.Window):
                 pass
 
     def _on_temperature_changed(self, scale):
+        self.lbl_temp.set_text("%d K" % int(scale.get_value()))
         if not self.switch_temp.get_active():
             return
         # Debounce: attendre 150ms avant d'appliquer
@@ -591,11 +398,7 @@ class BrightnessPopup(Gtk.Window):
 
 def main():
     signal.signal(signal.SIGINT, signal.SIG_DFL)
-    win = BrightnessPopup()
-    win.connect("destroy", Gtk.main_quit)
-    win.show_all()
-    win.scale_bright.grab_focus()
-    Gtk.main()
+    BrightnessPopup().run()
 
 
 if __name__ == "__main__":

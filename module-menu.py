@@ -97,48 +97,225 @@ def apply():
 
 
 CSS = """
-/* Même pile que la barre : Inter (ou Adwaita Sans, son dérivé déjà présent)
-   pour le texte, Nerd Font en queue pour les glyphes. Sans cette règle la
-   fenêtre hérite du gtk-font-name système, ici une monospace. */
+/* Même vocabulaire que les popups de la barre (menu_common.py), transposé en
+   GTK4 : cette fenêtre n'est pas un layer-shell et ne peut donc pas partager
+   la feuille commune, mais elle partage ses matériaux — sans quoi elle serait
+   la seule surface du système à ne pas ressembler aux autres.
+
+   Les valeurs sont volontairement identiques : aplat de carte à 6,5 %, rayon
+   de 10 px, lignes de 42 px, filets en retrait de 44 px. */
 window, label, button, entry, switch, scale, list, row {
-    font-family: "Inter", "Adwaita Sans", "SF Pro Text",
+    font-family: "SF Pro Text", "Inter", "Adwaita Sans",
                  "Material Symbols Rounded",
                  "JetBrainsMono Nerd Font Propo", "JetBrainsMono Nerd Font",
                  "Symbols Nerd Font", "Noto Sans Symbols 2";
-}
-window { background-color: rgba(30, 30, 32, 0.72); border-radius: 12px; }
-.title { font-size: 15px; font-weight: bold; color: #ebebf0; margin: 4px 2px 10px 2px; }
-.mod-row { padding: 7px 4px; }
-.mod-name { font-size: 14px; color: #ebebf0; }
-switch { min-width: 48px; min-height: 26px; }
-.close-btn {
-    background: transparent;
-    border: none;
-    color: #ebebf0;
-    font-size: 18px;
-    font-weight: bold;
-    padding: 0 8px;
-    min-height: 24px;
-    min-width: 24px;
-}
-.close-btn:hover { background-color: rgba(255, 69, 58, 0.18); color: #ff453a; border-radius: 6px; }
-.quick-btn {
     font-size: 13px;
-    padding: 8px;
-    border-radius: 8px;
-    background-color: rgba(255, 255, 255, 0.09);
+}
+window {
+    background-color: rgba(28, 28, 30, 0.74);
     color: #ebebf0;
+    border-radius: 14px;
+}
+label { color: #ebebf0; }
+
+.popup-title { font-size: 15px; font-weight: 600; color: #f5f5f7; }
+.section-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(235, 235, 245, 0.62);
+    margin-left: 4px;
+}
+
+.card { background-color: rgba(255, 255, 255, 0.065); border-radius: 10px; }
+.card separator {
+    background-color: rgba(255, 255, 255, 0.075);
+    background-image: none;
+    min-height: 1px;
+    margin-left: 44px;
+}
+/* Carte sans colonne d'icônes (la liste des modules) : le filet se recale sur
+   le texte, sinon il démarre au milieu d'un blanc. */
+.card.flush separator { margin-left: 12px; }
+.row {
+    background-color: transparent;
+    background-image: none;
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 9px 12px;
+    min-height: 24px;
+    transition: background-color 110ms ease-out;
+}
+.card > .row:first-child { border-radius: 10px 10px 0 0; }
+.card > .row:last-child  { border-radius: 0 0 10px 10px; }
+.card > .row:only-child  { border-radius: 10px; }
+button.row:hover  { background-color: rgba(255, 255, 255, 0.10); }
+button.row:active { background-color: rgba(255, 255, 255, 0.16); }
+.row.static:hover { background-color: transparent; }
+
+.row-icon { font-size: 17px; color: rgba(235, 235, 245, 0.88); }
+.row-label { color: #f0f0f5; }
+.row-sub { font-size: 11px; color: rgba(235, 235, 245, 0.52); }
+
+/* Un module replié par autofit n'est pas caché par choix : la mention est une
+   précision sur l'état, pas un second libellé. */
+.row-note { font-size: 11px; color: rgba(235, 235, 245, 0.42); }
+
+/* Comme dans les popups, le thème gonfle l'interrupteur si on ne remet pas
+   ses marges à zéro : 48 x 36 au lieu de 44 x 24. */
+switch {
+    background-color: rgba(255, 255, 255, 0.17);
+    background-image: none;
+    margin: 0;
+    border: none;
+    box-shadow: none;
+    padding: 2px;
+    border-radius: 12px;
+    min-width: 36px;
+    min-height: 20px;
+    transition: background-color 140ms ease-out;
+}
+switch:checked { background-color: #0a84ff; }
+switch slider {
+    background-color: #ffffff;
+    margin: 0;
+    border: none;
+    border-radius: 50%;
+    min-width: 20px;
+    min-height: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+button.close-btn {
+    color: rgba(235, 235, 245, 0.5);
+    background: none;
+    background-image: none;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    min-width: 22px;
+    min-height: 22px;
+    border-radius: 11px;
+    font-size: 12px;
+}
+button.close-btn:hover {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+/* Les trois actions de tête teintent leur survol : elles ne règlent pas un
+   module mais toute la barre, et le geste n'est pas anodin. */
+button.row.hide:hover    { background-color: rgba(255, 214, 10, 0.18); }
+button.row.show:hover    { background-color: rgba(50, 215, 75, 0.18); }
+button.row.stealth:hover { background-color: rgba(10, 132, 255, 0.20); }
+
+scrollbar, scrollbar trough {
+    background-color: transparent;
+    background-image: none;
     border: none;
 }
-.quick-btn:hover { background-color: rgba(255, 255, 255, 0.16); }
-.quick-btn.hide:hover { background-color: rgba(255, 214, 10, 0.22); color: #ffd60a; }
-.quick-btn.show:hover { background-color: rgba(50, 215, 75, 0.22); color: #32d74b; }
-.quick-btn.stealth:hover { background-color: rgba(10, 132, 255, 0.22); color: #0a84ff; }
-switch:focus, button:focus, .mod-row:focus, *:focus {
+scrollbar slider {
+    background-color: rgba(255, 255, 255, 0.22);
+    border-radius: 4px;
+    min-width: 6px;
+    min-height: 28px;
+    margin: 2px;
+    border: none;
+}
+scrollbar slider:hover { background-color: rgba(255, 255, 255, 0.36); }
+
+switch:focus, button:focus, .row:focus, *:focus {
     outline: 2px solid rgba(10, 132, 255, 0.75);
     outline-offset: -2px;
 }
 """.encode()
+
+
+# ── Cartes et lignes (transposition GTK4 de menu_common) ──────────────────
+
+ICON_WIDTH = 22
+ROW_SPACING = 10
+
+
+def _icon_slot(icon):
+    """Colonne d'icône de largeur fixe.
+
+    Même ruse qu'en GTK3 : un GtkOverlay prend la taille de son enfant
+    principal et ignore celle de ses calques, si bien qu'un glyphe plus large
+    que 22 px déborde sans décaler le libellé de sa ligne.
+    """
+    lbl = Gtk.Label(label=icon or "")
+    lbl.add_css_class("row-icon")
+    lbl.set_halign(Gtk.Align.CENTER)
+    lbl.set_valign(Gtk.Align.CENTER)
+    gauge = Gtk.Box()
+    gauge.set_size_request(ICON_WIDTH, -1)
+    slot = Gtk.Overlay()
+    slot.set_child(gauge)
+    slot.add_overlay(lbl)
+    slot.set_valign(Gtk.Align.CENTER)
+    return slot
+
+
+class Card(Gtk.Box):
+    """Groupe de lignes apparentées, filets en retrait."""
+
+    def __init__(self):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add_css_class("card")
+        self._rows = 0
+
+    def add_row(self, widget):
+        if self._rows:
+            self.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        self.append(widget)
+        self._rows += 1
+        return widget
+
+    def action(self, icon, title, css=None, on_click=None):
+        btn = Gtk.Button()
+        btn.add_css_class("row")
+        btn.set_has_frame(False)
+        if css:
+            btn.add_css_class(css)
+        body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
+                       spacing=ROW_SPACING)
+        body.append(_icon_slot(icon))
+        lbl = Gtk.Label(label=title, xalign=0.0)
+        lbl.add_css_class("row-label")
+        lbl.set_ellipsize(3)          # Pango.EllipsizeMode.END
+        lbl.set_hexpand(True)
+        body.append(lbl)
+        btn.set_child(body)
+        if on_click is not None:
+            btn.connect("clicked", on_click)
+        return self.add_row(btn)
+
+    def toggle(self, title, active, note=None):
+        """Ligne « nom du module + interrupteur ». Renvoie l'interrupteur."""
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
+                      spacing=ROW_SPACING)
+        row.add_css_class("row")
+        row.add_css_class("static")
+
+        texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+        texts.set_valign(Gtk.Align.CENTER)
+        texts.set_hexpand(True)
+        lbl = Gtk.Label(label=title, xalign=0.0)
+        lbl.add_css_class("row-label")
+        texts.append(lbl)
+        if note:
+            sub = Gtk.Label(label=note, xalign=0.0)
+            sub.add_css_class("row-note")
+            texts.append(sub)
+        row.append(texts)
+
+        sw = Gtk.Switch()
+        sw.set_valign(Gtk.Align.CENTER)
+        sw.set_active(active)
+        row.append(sw)
+        self.add_row(row)
+        return sw
 
 
 class ModuleWindow(Gtk.ApplicationWindow):
@@ -151,93 +328,72 @@ class ModuleWindow(Gtk.ApplicationWindow):
         # poser à la main comme en GTK3. Hyprland floute alors la surface non
         # opaque — même matériau que les popups de la barre.
 
-        self.set_default_size(300, 720)
+        self.set_default_size(320, 720)
 
-        self.switches = []  # (switch, [ids])
+        self.switches = []  # (switch, [ids], handler)
 
-        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        outer.set_margin_top(10)
-        outer.set_margin_bottom(10)
-        outer.set_margin_start(12)
-        outer.set_margin_end(12)
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        outer.set_margin_top(14)
+        outer.set_margin_bottom(14)
+        outer.set_margin_start(14)
+        outer.set_margin_end(14)
         self.set_child(outer)
 
         # En-tête : titre + croix de fermeture.
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        header.set_margin_start(4)
+        header.set_margin_end(2)
         title = Gtk.Label(label="Modules waybar")
-        title.add_css_class("title")
+        title.add_css_class("popup-title")
         title.set_xalign(0.0)
         title.set_hexpand(True)
         header.append(title)
 
-        close = Gtk.Button(label="✕")
+        close = Gtk.Button(label="\u2715")
         close.add_css_class("close-btn")
-        close.set_valign(Gtk.Align.START)
+        close.set_has_frame(False)
+        close.set_valign(Gtk.Align.CENTER)
         close.connect("clicked", lambda _b: self.close())
         header.append(close)
         outer.append(header)
 
-        # Boutons d'accès rapide.
-        quick = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        quick.set_margin_bottom(8)
-
-        btn_hide = Gtk.Button(label="Cacher CPU·Temp·RAM·Wifi·Date·Fenêtre")
-        btn_hide.add_css_class("quick-btn")
-        btn_hide.add_css_class("hide")
-        btn_hide.set_hexpand(True)
-        btn_hide.connect("clicked", self.on_quick_hide)
-        quick.append(btn_hide)
-
-        btn_show = Gtk.Button(label="Tout afficher")
-        btn_show.add_css_class("quick-btn")
-        btn_show.add_css_class("show")
-        btn_show.connect("clicked", self.on_show_all)
-        quick.append(btn_show)
-
+        # -- Actions de tête --
+        # Trois boutons de formes et de largeurs différentes se disputaient le
+        # haut de la fenêtre. En lignes d'une même carte, on voit ce qu'ils ont
+        # en commun : ils agissent sur la barre entière, pas sur un module.
+        quick = Card()
+        quick.action("\U000f0209", "Cacher CPU · Temp · RAM · Wifi · Date · Fenêtre",
+                     css="hide", on_click=self.on_quick_hide)
+        quick.action("\U000f0208", "Tout afficher",
+                     css="show", on_click=self.on_show_all)
+        quick.action("\U000f05f9", "Masquer la barre (mode discret)",
+                     css="stealth", on_click=self.on_stealth)
         outer.append(quick)
 
-        # Mode discret : masque toute la barre sauf l'œil (clic sur l'œil = ressortir).
-        btn_stealth = Gtk.Button(label="󰈉  Masquer la barre (mode discret)")
-        btn_stealth.add_css_class("quick-btn")
-        btn_stealth.add_css_class("stealth")
-        btn_stealth.set_margin_bottom(8)
-        btn_stealth.connect("clicked", self.on_stealth)
-        outer.append(btn_stealth)
+        section = Gtk.Label(label="Modules", xalign=0.0)
+        section.add_css_class("section-title")
+        outer.append(section)
 
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_vexpand(True)
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         outer.append(scrolled)
 
-        listbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        scrolled.set_child(listbox)
+        card = Card()
+        card.add_css_class("flush")     # ces lignes-là n'ont pas d'icône
+        scrolled.set_child(card)
 
         hidden = load_hidden()
         folded = load_folded()
         for label, ids in MODULES:
-            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            row.add_css_class("mod-row")
-
             # Un module replié par autofit reste « visible » ici (le choix de
             # l'utilisateur est intact) mais n'est pas dans la barre : sans
             # cette mention, l'interrupteur semble mentir.
-            if any(i in folded for i in ids):
-                label += "  (replié — pas la place)"
-
-            name = Gtk.Label(label=label)
-            name.add_css_class("mod-name")
-            name.set_xalign(0.0)
-            name.set_hexpand(True)
-            row.append(name)
-
-            sw = Gtk.Switch()
-            sw.set_valign(Gtk.Align.CENTER)
-            sw.set_active(not any(i in hidden for i in ids))  # actif = visible
+            note = ("replié — pas la place"
+                    if any(i in folded for i in ids) else None)
+            sw = card.toggle(label, not any(i in hidden for i in ids), note)
             handler = sw.connect("state-set", self.on_toggle, ids)
-            row.append(sw)
-
             self.switches.append((sw, ids, handler))
-            listbox.append(row)
 
         # Échap ferme la fenêtre.
         key = Gtk.EventControllerKey()

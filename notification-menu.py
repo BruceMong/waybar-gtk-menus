@@ -11,12 +11,9 @@ import os
 import signal
 import subprocess
 
-import gi
-
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
-
-from menu_common import LayerPopup  # noqa: E402
+# menu_common fixe lui-même la version de GTK et fournit tout ce qui sert
+# ici : ce popup n'a plus une seule ligne de widget à écrire à la main.
+from menu_common import LayerPopup
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 DND_TOGGLE = os.path.join(CONFIG_DIR, "dnd-toggle.sh")
@@ -27,50 +24,38 @@ DEVNULL = subprocess.DEVNULL
 
 
 class NotificationPopup(LayerPopup):
+    """Trois cartes : l'interrupteur, le silence minuté, les réglages durables.
+
+    Les deux minuteries étaient auparavant une paire de boutons côte à côte,
+    sans rapport visible avec l'interrupteur qu'elles actionnent. En lignes,
+    sous le même toit, elles se lisent pour ce qu'elles sont : deux façons
+    d'activer le même réglage, mais pour un temps donné.
+    """
+
+    IC_DND = "\U000f009b"      # cloche barrée
+    IC_TIMER = "\U000f051b"    # minuteur
+    IC_SOUND = "\U000f057e"    # haut-parleur
+    IC_CLAUDE = "\U000f09d1"   # cerveau
+
     def __init__(self):
         super().__init__("Notifications", width=340, margin_right=360)
 
-        # -- Ne pas déranger --
-        self.box.pack_start(self._switch_row(
-            "  Ne pas déranger", self._dnd_state(),
-            self._on_dnd_toggled, store="switch_dnd"), False, False, 0)
+        dnd = self.add_card()
+        self.switch_dnd = dnd.toggle(self.IC_DND, "Ne pas déranger",
+                                     self._dnd_state(), self._on_dnd_toggled)
 
-        # -- Minuteries Ne pas déranger --
-        row = Gtk.Box(spacing=8, homogeneous=True)
-        btn30 = Gtk.Button(label="  30 min")
-        btn30.connect("clicked", lambda *_: self._snooze(1800, "30 min"))
-        btn1h = Gtk.Button(label="  1 h")
-        btn1h.connect("clicked", lambda *_: self._snooze(3600, "1 h"))
-        row.pack_start(btn30, True, True, 0)
-        row.pack_start(btn1h, True, True, 0)
-        self.box.pack_start(row, False, False, 0)
+        snooze = self.add_card("Silence temporaire")
+        snooze.action(self.IC_TIMER, "30 minutes",
+                      on_click=lambda *_: self._snooze(1800, "30 min"))
+        snooze.action(self.IC_TIMER, "1 heure",
+                      on_click=lambda *_: self._snooze(3600, "1 h"))
 
-        # -- Son des notifications --
-        self.box.pack_start(self._switch_row(
-            "  Son des notifications", os.path.exists(SOUND_FLAG),
-            self._on_sound_toggled), False, False, 0)
-
-        # -- Notif Claude → fenêtre (actif tant que le drapeau est absent) --
-        self.box.pack_start(self._switch_row(
-            "󰧑  Notif Claude → fenêtre", not os.path.exists(CLAUDE_FLAG),
-            self._on_claude_toggled), False, False, 0)
-
-    # ---- Construction ----
-
-    def _switch_row(self, title, active, handler, store=None):
-        row = Gtk.Box(spacing=8)
-        lbl = Gtk.Label(xalign=0)
-        lbl.set_markup("<b>%s</b>" % title)
-        row.pack_start(lbl, True, True, 0)
-
-        sw = Gtk.Switch()
-        sw.set_valign(Gtk.Align.CENTER)
-        sw.set_active(active)
-        sw.connect("notify::active", handler)
-        row.pack_end(sw, False, False, 0)
-        if store:
-            setattr(self, store, sw)
-        return row
+        prefs = self.add_card("Réglages")
+        prefs.toggle(self.IC_SOUND, "Son des notifications",
+                     os.path.exists(SOUND_FLAG), self._on_sound_toggled)
+        # Actif tant que le drapeau « disabled » est absent.
+        prefs.toggle(self.IC_CLAUDE, "Notif Claude → fenêtre",
+                     not os.path.exists(CLAUDE_FLAG), self._on_claude_toggled)
 
     # ---- État ----
 

@@ -24,7 +24,8 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib  # noqa: E402
 
-from menu_common import LayerPopup  # noqa: E402
+from menu_common import (Card, LayerPopup,  # noqa: E402
+                         caption_label, custom_row)
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 UPDATES_SH = os.path.join(CONFIG_DIR, "updates.sh")
@@ -47,14 +48,17 @@ SYSTEM_PKGS = tuple(REBOOT_EXACT) + REBOOT_PREFIXES + (
     "xorg-server", "vulkan-radeon", "vulkan-intel", "gcc-libs",
 )
 
-EXTRA_CSS = b"""
-label.dim   { color: #68686f; font-size: 11px; }
-label.warn  { color: #ff9f0a; }
-label.ok    { color: #32d74b; }
-label.count { color: #0a84ff; font-weight: bold; }
-button.accent label { color: #ffffff; font-weight: bold; }
-"""
-
+EXTRA_CSS = """
+/* Le compteur d'une famille de paquets : c'est le chiffre qu'on vient
+   chercher, il a droit au bleu d'accent plutôt qu'au gris des valeurs. */
+.row-value.count { color: #0a84ff; font-weight: bold; }
+.row-label.warn  { color: #ff9f0a; }
+.row-icon.warn   { color: #ff9f0a; }
+.row-label.ok    { color: #32d74b; }
+.row-icon.ok     { color: #32d74b; }
+expander title { color: rgba(235, 235, 245, 0.62); font-size: 12px; }
+expander title:hover { color: #ebebf0; }
+""".encode()
 
 def apply_extra_css():
     provider = Gtk.CssProvider()
@@ -137,6 +141,24 @@ def download_size(pkgs):
 
 
 class UpdatesPopup(LayerPopup):
+    """Un état, une répartition, deux actions.
+
+    Le popup répondait déjà à la bonne question — *quoi* mettre à jour, pas
+    seulement *combien* — mais son plan restait une colonne de libellés et de
+    boutons. Les familles de paquets forment maintenant une carte : quatre
+    lignes comparables, chacune avec son compte à droite.
+    """
+
+    IC_SYSTEM = "\U000f0493"    # engrenage
+    IC_APPS = "\U000f03d7"      # paquet
+    IC_DEPS = "\U000f01a7"      # briques
+    IC_AUR = "\U000f08c7"       # logo Arch
+    IC_OK = "\U000f012c"        # coche
+    IC_WARN = "\U000f0026"      # alerte
+    IC_PENDING = "\U000f0dbe"   # téléchargement en attente
+    IC_REFRESH = "\U000f0453"   # actualiser
+    IC_UPGRADE = "\U000f06b1"   # tout mettre à jour
+
     def __init__(self):
         super().__init__("Mises à jour", width=380, margin_right=10)
         apply_extra_css()
@@ -154,43 +176,48 @@ class UpdatesPopup(LayerPopup):
         total = len(repo) + len(aur)
 
         if total == 0:
-            self._row_label("  Système à jour", css="ok")
             since = last_upgrade()
-            if since:
-                self._row_label("Dernière mise à jour : %s" % since, css="dim")
-            self._add_button("Vérifier maintenant", self._refresh)
+            state = self.add_card()
+            row = state.action(self.IC_OK, "Système à jour",
+                               subtitle=("Dernière mise à jour : %s" % since)
+                               if since else None)
+            self._tint(row, "ok")
+            actions = self.add_card()
+            actions.action(self.IC_REFRESH, "Vérifier maintenant",
+                           on_click=self._refresh)
             return
 
         # -- Résumé --
         size = download_size(repo)
-        self._row_markup("<b>%d paquet%s en attente</b>"
-                         % (total, "s" if total > 1 else ""))
-
         sub = []
         if size is not None and size >= 1:
             sub.append("%.0f Mo à télécharger" % size)
         since = last_upgrade()
         if since:
             sub.append("dernière mise à jour %s" % since)
-        if sub:
-            self._row_label(" · ".join(sub), css="dim")
 
-        # -- Avertissement redémarrage --
+        state = self.add_card()
+        state.action(self.IC_PENDING,
+                     "%d paquet%s en attente" % (total, "s" if total > 1 else ""),
+                     subtitle=" · ".join(sub) or None)
         if any(needs_reboot(p) for p in repo):
-            self._row_markup(
-                "  <b>Redémarrage nécessaire ensuite</b>", css="warn")
-
-        self.box.pack_start(Gtk.Separator(), False, False, 0)
+            row = state.action(self.IC_WARN, "Redémarrage nécessaire ensuite",
+                               subtitle="noyau ou brique système mis à jour")
+            self._tint(row, "warn")
 
         # -- Répartition par famille --
-        self._category("󰒓", "Système", system,
-                       "noyau et pilotes")
-        self._category("󰏗", "Applications", apps,
-                       "tes logiciels")
-        self._category("󰆧", "Dépendances", deps,
-                       "bibliothèques internes")
-        self._category("󰣇", "AUR", aur,
-                       "à recompiler")
+        families = Card()
+        for icon, name, pkgs, hint in (
+                (self.IC_SYSTEM, "Système", system, "noyau et pilotes"),
+                (self.IC_APPS, "Applications", apps, "tes logiciels"),
+                (self.IC_DEPS, "Dépendances", deps, "bibliothèques internes"),
+                (self.IC_AUR, "AUR", aur, "à recompiler")):
+            if not pkgs:
+                continue
+            row = families.action(icon, name, subtitle=hint,
+                                  value=str(len(pkgs)))
+            row.value_label.get_style_context().add_class("count")
+        self.add_card("Répartition", card=families)
 
         # -- Détail repliable --
         exp = Gtk.Expander(label="Voir la liste complète")
@@ -211,30 +238,26 @@ class UpdatesPopup(LayerPopup):
         lbl.set_max_width_chars(42)
         scroll.add(lbl)
         exp.add(scroll)
+        exp.set_margin_start(4)
         self.box.pack_start(exp, False, False, 0)
 
-        self.box.pack_start(Gtk.Separator(), False, False, 0)
-
         # -- Actions --
-        self._add_button("  Tout mettre à jour", self._upgrade, accent=True)
-        self._add_button("  Actualiser", self._refresh)
+        # La mise à jour complète ouvre un terminal et demande le mot de passe :
+        # c'est un engagement, pas une ligne de liste. Elle garde son bouton.
+        btn = Gtk.Button(label="\U000f06b1  Tout mettre à jour")
+        btn.get_style_context().add_class("accent")
+        btn.connect("clicked", self._upgrade)
+        self.box.pack_start(btn, False, False, 0)
 
-    def _category(self, icon, name, pkgs, hint):
-        if not pkgs:
-            return
-        row = Gtk.Box(spacing=8)
-        lbl = Gtk.Label(xalign=0)
-        lbl.set_markup("%s  %s" % (icon, GLib.markup_escape_text(name)))
-        row.pack_start(lbl, False, False, 0)
-        hint_lbl = Gtk.Label(xalign=0, label=hint)
-        hint_lbl.get_style_context().add_class("dim")
-        hint_lbl.set_ellipsize(3)   # Pango.EllipsizeMode.END
-        hint_lbl.set_max_width_chars(1)
-        row.pack_start(hint_lbl, True, True, 0)
-        count = Gtk.Label(label=str(len(pkgs)))
-        count.get_style_context().add_class("count")
-        row.pack_end(count, False, False, 0)
-        self.box.pack_start(row, False, False, 0)
+        more = self.add_card()
+        more.action(self.IC_REFRESH, "Actualiser la liste",
+                    on_click=self._refresh)
+
+    @staticmethod
+    def _tint(row, css):
+        """Colore libellé et icône d'une ligne d'état (vert, orange)."""
+        row.title_label.get_style_context().add_class(css)
+        row.icon_label.get_style_context().add_class(css)
 
     def _detail_markup(self, system, apps, deps, aur):
         parts = []
@@ -245,26 +268,6 @@ class UpdatesPopup(LayerPopup):
             body = GLib.markup_escape_text(", ".join(sorted(pkgs)))
             parts.append("<b>%s</b>\n<span size='small'>%s</span>" % (title, body))
         return "\n\n".join(parts)
-
-    def _row_label(self, text, css=None):
-        lbl = Gtk.Label(xalign=0, label=text)
-        if css:
-            lbl.get_style_context().add_class(css)
-        self.box.pack_start(lbl, False, False, 0)
-
-    def _row_markup(self, markup, css=None):
-        lbl = Gtk.Label(xalign=0)
-        lbl.set_markup(markup)
-        if css:
-            lbl.get_style_context().add_class(css)
-        self.box.pack_start(lbl, False, False, 0)
-
-    def _add_button(self, label, handler, accent=False):
-        btn = Gtk.Button(label=label)
-        if accent:
-            btn.get_style_context().add_class("accent")
-        btn.connect("clicked", handler)
-        self.box.pack_start(btn, False, False, 0)
 
     # ---- Handlers ----
 

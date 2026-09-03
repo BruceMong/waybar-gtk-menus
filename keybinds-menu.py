@@ -1,13 +1,24 @@
 #!/usr/bin/env python3
 """Popup Raccourcis clavier pour Waybar (style menu luminosité / power).
 
-Liste tous les binds Hyprland (hyprland.conf + plugins.conf) groupés par
-section, avec recherche, et permet de réassigner une combinaison en la
-capturant au clavier. La ligne du fichier source est réécrite en place
-(après backup .orig / .bak) puis `hyprctl reload` est déclenché.
+Liste tous les binds Hyprland (hyprland.lua) groupés par section, avec
+recherche, et permet de réassigner une combinaison en la capturant au
+clavier. La ligne du fichier source est réécrite en place (après backup
+.orig / .bak) puis `hyprctl reload` est déclenché.
 
-Les binds souris (bindm) sont affichés en lecture seule : leur « touche »
-(mouse:272) n'est pas capturable au clavier.
+La config est en Lua depuis la migration du 2026-09-02 (le format .conf
+disparaît en Hyprland 0.57) : un bind s'écrit désormais
+`hl.bind(mainMod .. " + SHIFT + R", hl.dsp.exec_cmd("..."))`. C'est cette
+forme que le parseur lit et réécrit — une ligne par bind, ce pour quoi les
+boucles `for` sont volontairement déroulées dans hyprland.lua.
+
+Les binds souris (option `mouse`) sont affichés en lecture seule : leur
+« touche » (mouse:272) n'est pas capturable au clavier.
+
+Une dernière section, « À attribuer », liste des actions utiles restées sans
+raccourci avec une combinaison libre proposée. Elle est purement indicative :
+rien n'est écrit dans la config tant que la ligne de l'infobulle n'a pas été
+collée à la main dans hyprland.lua.
 """
 import os
 import re
@@ -21,16 +32,20 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib  # noqa: E402
 
-from menu_common import LayerPopup  # noqa: E402
+from menu_common import (Card, LayerPopup,  # noqa: E402
+                         caption_label, section_label)
 
 HYPR_DIR = os.path.expanduser("~/.config/hypr")
-SOURCES = [os.path.join(HYPR_DIR, "hyprland.conf"),
-           os.path.join(HYPR_DIR, "plugins.conf")]
+# plugins.lua ne contient plus de bind : les raccourcis des dispatchers de
+# plugins (hyprexpo, Hypr-DarkWindow) vivent dans hyprland.lua sous leur forme
+# `exec hyprctl dispatch`, qui se résout à l'appui sur la touche.
+SOURCES = [os.path.join(HYPR_DIR, "hyprland.lua")]
 DEVNULL = subprocess.DEVNULL
 
-# `bind`, `bindm`, `bindel`… suivis de « = mods, touche, reste »
-BIND_RE = re.compile(r"^(?P<indent>\s*)(?P<flags>bind[a-z]*)\s*=\s*(?P<body>.*?)\s*$")
+# `hl.bind(<touches>, <dispatcher>[, <options>])` sur une seule ligne.
+BIND_RE = re.compile(r"^(?P<indent>\s*)hl\.bind\((?P<body>.*)\)\s*$")
 
+# Une chaîne littérale Lua : "…", '…' ou [[…]].
 # Ordre canonique d'affichage des modificateurs.
 MOD_ORDER = ["SUPER", "CTRL", "ALT", "SHIFT"]
 MOD_LABEL = {"SUPER": "Super", "CTRL": "Ctrl", "ALT": "Alt", "SHIFT": "Shift"}
@@ -43,73 +58,154 @@ KEY_LABEL = {
     "minus": "-", "underscore": "_", "apostrophe": "'", "quotedbl": '"',
     "ampersand": "&", "parenleft": "(", "parenright": ")",
     "eacute": "é", "egrave": "è", "agrave": "à", "ccedilla": "ç",
+    "twosuperior": "²",
+    "period": ".", "comma": ",", "semicolon": ";", "equal": "=",
+    "prior": "Page ↑", "next": "Page ↓",
 }
 
-# Dispatchers Hyprland natifs -> libellé lisible (exec est traité à part).
+# Dispatchers Lua (hl.dsp.*) -> libellé lisible. `exec_cmd` est traité à part :
+# pour lui, l'information utile est la commande, pas le nom du dispatcher.
 DISPATCHER_LABEL = {
-    "killactive": "Fermer la fenêtre",
-    "closewindow": "Fermer la fenêtre",
-    "togglefloating": "Basculer flottant",
-    "fullscreen": "Plein écran",
-    "fakefullscreen": "Faux plein écran",
-    "pseudo": "Pseudo-tiling",
-    "pin": "Épingler",
-    "movefocus": "Focus →",
-    "movewindow": "Déplacer la fenêtre →",
-    "resizeactive": "Redimensionner",
-    "workspace": "Aller au workspace",
-    "movetoworkspace": "Envoyer au workspace",
-    "movetoworkspacesilent": "Envoyer au workspace (silencieux)",
-    "togglespecialworkspace": "Workspace spécial",
-    "togglegroup": "Grouper / dégrouper",
-    "changegroupactive": "Fenêtre suivante du groupe",
-    "layoutmsg": "Layout",
+    "window.close": "Fermer la fenêtre",
+    "window.kill": "Tuer la fenêtre",
+    "window.float": "Basculer flottant",
+    "window.fullscreen": "Plein écran",
+    "window.pseudo": "Pseudo-tiling",
+    "window.pin": "Épingler",
+    "window.center": "Centrer la fenêtre",
+    "window.move": "Déplacer la fenêtre",
+    "window.resize": "Redimensionner",
+    "window.drag": "Déplacer à la souris",
+    "window.cycle_next": "Fenêtre suivante",
+    "window.bring_to_top": "Ramener au premier plan",
+    "window.swap": "Échanger les fenêtres",
+    "window.tag": "Étiqueter la fenêtre",
+    "focus": "Focus",
+    "layout": "Layout",
     "exit": "Quitter Hyprland",
-    "forcerendererreload": "Recharger le rendu",
-    "centerwindow": "Centrer la fenêtre",
-    "splitratio": "Ratio de split",
-    "invertactivewindow": "Inverser les couleurs",
-    "easymotion": "Easymotion",
+    "force_renderer_reload": "Recharger le rendu",
+    "group.toggle": "Grouper / dégrouper",
+    "group.next": "Fenêtre suivante du groupe",
+    "group.active": "Onglet du groupe",
+    "group.lock": "Verrouiller le groupe",
+    "workspace.move": "Workspace vers l'écran",
+    "workspace.toggle_special": "Workspace spécial",
+    "workspace.rename": "Renommer le workspace",
+    "cursor.move_to_corner": "Curseur vers un coin",
 }
 
-EXTRA_CSS = b"""
-entry {
-    background-color: rgba(255, 255, 255, 0.09);
-    color: #ebebf0;
-    border: none;
-    border-radius: 8px;
-    padding: 6px 10px;
+# Certains arguments sont des mots-clés, pas des valeurs : « Aller au workspace
+# previous » ne se lit pas. La table remplace le couple entier quand il existe.
+ARG_LABEL = {
+    ("focus", 'workspace="previous"'): "Bureau précédent",
+    ("focus", 'workspace="e+1"'): "Bureau suivant",
+    ("focus", 'workspace="e-1"'): "Bureau précédent",
+    ("window.cycle_next", "next=false"): "Fenêtre précédente",
+    ("group.next", "forward=false"): "Fenêtre précédente du groupe",
+    ("window.move", "out_of_group=true"): "Sortir du groupe",
 }
-entry:focus { outline: 2px solid rgba(10, 132, 255, 0.75); outline-offset: -2px; }
-label.section {
-    color: #ff9f0a;
+
+# Actions courantes qui n'ont pas encore de raccourci, avec une combinaison
+# restée libre qui leur irait. Rien n'est attribué ici : la section « À
+# attribuer » les affiche en lecture seule et met la ligne Lua prête à coller
+# dans l'infobulle. Une entrée disparaît d'elle-même dès que sa combinaison est
+# prise dans hyprland.lua — c'est le signal qu'elle a été adoptée.
+#
+# `probe` sert quand la touche affichée n'est pas une vraie touche (« 1…0 ») :
+# c'est elle qu'on cherche dans la config pour savoir si la suggestion tient
+# toujours.
+SUGGESTIONS_SECTION = "À attribuer (suggestions)"
+SUGGESTIONS = [
+    # -- fenêtres
+    {"mods": ["SUPER", "CTRL"], "key": "C",
+     "label": "Forcer la fermeture d'une fenêtre bloquée",
+     "line": 'hl.bind(mainMod .. " + CTRL + C", hl.dsp.window.kill())'},
+    {"mods": ["SUPER"], "key": "K",
+     "label": "Centrer la fenêtre flottante",
+     "line": 'hl.bind(mainMod .. " + K", hl.dsp.window.center())'},
+    {"mods": ["SUPER"], "key": "O",
+     "label": "Revenir à la fenêtre précédente",
+     "line": 'hl.bind(mainMod .. " + O", hl.dsp.focus({ window = "last" }))'},
+    {"mods": ["SUPER", "SHIFT"], "key": "Tab",
+     "label": "Sélecteur de fenêtres (Walker)",
+     "line": 'hl.bind(mainMod .. " + SHIFT + Tab", hl.dsp.exec_cmd("walker -m windows"))'},
+    # -- workspaces
+    {"mods": ["SUPER"], "key": "next",
+     "label": "Workspace suivant (au clavier)",
+     "line": 'hl.bind(mainMod .. " + next", hl.dsp.focus({ workspace = "e+1" }))'},
+    {"mods": ["SUPER"], "key": "prior",
+     "label": "Workspace précédent (au clavier)",
+     "line": 'hl.bind(mainMod .. " + prior", hl.dsp.focus({ workspace = "e-1" }))'},
+    {"mods": ["SUPER", "SHIFT"], "key": "next",
+     "label": "Envoyer la fenêtre au workspace suivant",
+     "line": 'hl.bind(mainMod .. " + SHIFT + next", hl.dsp.window.move({ workspace = "e+1" }))'},
+    {"mods": ["SUPER", "SHIFT"], "key": "prior",
+     "label": "Envoyer la fenêtre au workspace précédent",
+     "line": 'hl.bind(mainMod .. " + SHIFT + prior", hl.dsp.window.move({ workspace = "e-1" }))'},
+    {"mods": ["SUPER", "CTRL"], "key": "1…0", "probe": "ampersand",
+     "label": "Envoyer au workspace N sans le suivre",
+     "line": 'hl.bind(mainMod .. " + CTRL + ampersand", hl.dsp.exec_cmd('
+             '"~/.config/hypr/scripts/ws-key.sh movetoworkspacesilent 1"))\n'
+             "(idem pour les neuf autres chiffres)"},
+    {"mods": ["SUPER"], "key": "comma",
+     "label": "Focus sur l'écran de gauche",
+     "line": 'hl.bind(mainMod .. " + comma", hl.dsp.focus({ monitor = "l" }))'},
+    {"mods": ["SUPER"], "key": "semicolon",
+     "label": "Focus sur l'écran de droite",
+     "line": 'hl.bind(mainMod .. " + semicolon", hl.dsp.focus({ monitor = "r" }))'},
+    # -- lancement
+    {"mods": ["SUPER", "SHIFT"], "key": "M",
+     "label": "Menu d'extinction (au lieu de quitter sec)",
+     "line": 'hl.bind(mainMod .. " + SHIFT + M", hl.dsp.exec_cmd("~/.config/waybar/power-menu.py"))'},
+    {"mods": ["SUPER"], "key": "period",
+     "label": "Emojis et symboles",
+     "line": 'hl.bind(mainMod .. " + period", hl.dsp.exec_cmd("walker -m symbols"))'},
+    {"mods": ["SUPER", "SHIFT"], "key": "Escape",
+     "label": "Moniteur système (btop)",
+     "line": 'hl.bind(mainMod .. " + SHIFT + Escape", hl.dsp.exec_cmd("kitty -e btop"))'},
+    # -- système
+    {"mods": ["SUPER", "CTRL"], "key": "Print",
+     "label": "Capture d'une région vers le presse-papiers",
+     "line": 'hl.bind(mainMod .. " + CTRL + Print", hl.dsp.exec_cmd('
+             '"hyprshot -m region --clipboard-only"))'},
+    {"mods": ["SUPER", "SHIFT"], "key": "B",
+     "label": "Masquer / afficher la barre Waybar",
+     "line": 'hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("killall -SIGUSR1 waybar"))'},
+    {"mods": ["SUPER", "SHIFT"], "key": "A",
+     "label": "Caféine : bloquer la mise en veille",
+     "line": 'hl.bind(mainMod .. " + SHIFT + A", hl.dsp.exec_cmd('
+             '"~/.config/waybar/caffeine-toggle.sh"))'},
+]
+
+EXTRA_CSS = """
+/* La combinaison est une pastille posée à droite de la ligne : fond
+   translucide, chiffres en monospace pour que Super + Shift + F ne danse pas
+   d'une ligne à l'autre. Les largeurs restent inégales — c'est la longueur
+   réelle des raccourcis — mais le fond commun les fait lire comme une colonne
+   plutôt que comme des créneaux. */
+.combo {
+    background-color: rgba(255, 255, 255, 0.10);
+    color: #5e9cff;
+    font-family: "JetBrainsMono Nerd Font", monospace;
     font-size: 11px;
-    font-weight: bold;
-    margin-top: 6px;
-}
-label.desc { color: #ebebf0; }
-label.cmd { color: #68686f; font-size: 10px; }
-button.combo {
-    background-color: rgba(255, 255, 255, 0.09);
-    color: #0a84ff;
-    font-family: monospace;
-    font-size: 11px;
-    padding: 4px 10px;
+    padding: 3px 8px;
     border-radius: 6px;
 }
-button.combo:hover { background-color: rgba(255, 255, 255, 0.16); color: #ebebf0; }
-button.combo.capturing { background-color: #0a84ff; color: #ffffff; }
-button.combo.readonly { color: #68686f; }
-label.status { font-size: 11px; }
-label.status.err { color: #ff453a; }
-label.status.ok { color: #32d74b; }
-scrolledwindow { border-radius: 8px; }
+.row:hover .combo { background-color: rgba(255, 255, 255, 0.18); }
+/* Pendant la capture, la ligne entière attend une touche : la pastille passe
+   en bleu plein, c'est le seul endroit de l'interface qui change. */
+.combo.capturing { background-color: #0a84ff; color: #ffffff; }
+.combo.readonly { color: rgba(235, 235, 245, 0.35); }
+.caption.err { color: #ff453a; }
+.caption.ok { color: #32d74b; }
+/* Les lignes n'ayant pas de colonne d'icône, les filets se recalent sur le
+   texte : 12 px, soit le seul padding de la ligne. */
+.card separator { margin-left: 12px; }
 """
-
 
 def apply_extra_css():
     provider = Gtk.CssProvider()
-    provider.load_from_data(EXTRA_CSS)
+    provider.load_from_data(EXTRA_CSS.encode())
     Gtk.StyleContext.add_provider_for_screen(
         Gdk.Screen.get_default(), provider,
         Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
@@ -118,28 +214,78 @@ def apply_extra_css():
 # ---------------------------------------------------------------- parsing
 
 
-def split_bind(body):
-    """Découpe « mods, touche, dispatcher, args » en 3 parties.
+def split_lua_args(body):
+    """Découpe les arguments d'un appel Lua, en ignorant les virgules internes.
 
-    Les args d'un dispatcher contiennent souvent des virgules (exec …), donc
-    on ne découpe que sur les deux premières.
+    `hl.bind(mainMod .. " + Q", hl.dsp.exec_cmd("a, b"))` a deux arguments,
+    pas trois : on ne coupe qu'au niveau zéro de parenthèses / accolades, et
+    jamais à l'intérieur d'une chaîne — y compris un littéral long [[…]], que
+    les commandes shell utilisent pour éviter d'échapper les guillemets.
     """
-    parts = body.split(",", 2)
-    if len(parts) < 2:
-        return None
-    mods = parts[0].strip()
-    key = parts[1].strip()
-    rest = parts[2].strip() if len(parts) > 2 else ""
-    return mods, key, rest
+    args, depth, i, start = [], 0, 0, 0
+    quote = None          # guillemet ouvert (" ou ') ou "[[" pour un long
+    while i < len(body):
+        c = body[i]
+        if quote == "[[":
+            if body.startswith("]]", i):
+                quote, i = None, i + 2
+                continue
+        elif quote:
+            if c == "\\":
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+        elif c in '"\'':
+            quote = c
+        elif body.startswith("[[", i):
+            quote, i = "[[", i + 2
+            continue
+        elif c in "({":
+            depth += 1
+        elif c in ")}":
+            depth -= 1
+        elif c == "," and depth == 0:
+            args.append(body[start:i].strip())
+            start = i + 1
+        i += 1
+    args.append(body[start:].strip())
+    return args
 
 
-def normalize_mods(mods_raw, variables):
-    """Résout les variables ($mainMod) et renvoie la liste des modificateurs."""
-    text = mods_raw
-    for name, value in variables.items():
-        text = text.replace("$" + name, value)
+def lua_str_value(text):
+    """Valeur d'un littéral Lua ("…", '…' ou [[…]]), ou None si autre chose."""
+    t = text.strip()
+    for opener, closer in (('"', '"'), ("'", "'"), ("[[", "]]")):
+        if t.startswith(opener) and t.endswith(closer) and len(t) > len(opener):
+            return t[len(opener):-len(closer)]
+    return None
+
+
+def keys_expr_to_combo(expr, variables):
+    """« mainMod .. " + SHIFT + R" » -> « SUPER + SHIFT + R ».
+
+    L'expression est une concaténation Lua de littéraux et de variables
+    locales (mainMod). On la reconstitue à plat pour l'affichage et pour
+    savoir quels modificateurs sont en jeu.
+    """
+    out = []
+    for piece in expr.split(".."):
+        piece = piece.strip()
+        value = lua_str_value(piece)
+        if value is not None:
+            out.append(value)
+        elif piece in variables:
+            out.append(variables[piece])
+        else:
+            out.append(piece)
+    return "".join(out)
+
+
+def normalize_mods(combo):
+    """Modificateurs d'une combinaison à plat, dans l'ordre canonique."""
     found = []
-    for token in text.replace("+", " ").split():
+    for token in combo.split("+"):
         tok = token.strip().upper()
         if tok in ("SUPER", "MOD4", "WIN"):
             tok = "SUPER"
@@ -152,21 +298,37 @@ def normalize_mods(mods_raw, variables):
     return [m for m in MOD_ORDER if m in found]
 
 
-def strip_inline_comment(text):
-    """Retire un « # commentaire » de fin de ligne (jamais dans une commande).
-
-    Les binds `exec` peuvent légitimement contenir un #, on ne touche donc
-    qu'aux dispatchers natifs, où le # est toujours un commentaire.
-    """
-    if text.startswith("exec"):
-        return text
-    return text.split("#")[0].strip()
+def combo_key(combo):
+    """Touche d'une combinaison à plat : le dernier jeton non-modificateur."""
+    tokens = [t.strip() for t in combo.split("+") if t.strip()]
+    keys = [t for t in tokens if t.upper() not in
+            ("SUPER", "MOD4", "WIN", "CTRL", "CONTROL", "ALT", "MOD1", "SHIFT")]
+    return keys[-1] if keys else (tokens[-1] if tokens else "")
 
 
-def expand_vars(text, variables):
-    """Remplace les $variables par leur valeur, pour l'affichage seulement."""
-    for name, value in sorted(variables.items(), key=lambda kv: -len(kv[0])):
-        text = text.replace("$" + name, value)
+def strip_lua_comment(text):
+    """Retire un « -- commentaire » de fin de ligne, jamais dans une chaîne."""
+    depth, i, quote = 0, 0, None
+    while i < len(text):
+        c = text[i]
+        if quote == "[[":
+            if text.startswith("]]", i):
+                quote, i = None, i + 2
+                continue
+        elif quote:
+            if c == "\\":
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+        elif c in '"\'':
+            quote = c
+        elif text.startswith("[[", i):
+            quote, i = "[[", i + 2
+            continue
+        elif text.startswith("--", i):
+            return text[:i].rstrip()
+        i += 1
     return text
 
 
@@ -183,12 +345,14 @@ def shorten_section(text):
 
 
 def parse_variables(lines):
-    """Récupère les « $nom = valeur » d'un fichier de config."""
+    """Récupère les « local nom = "valeur" » d'un fichier de config Lua."""
     variables = {}
     for line in lines:
-        m = re.match(r"^\s*\$(\w+)\s*=\s*([^#]*)", line)
+        m = re.match(r'^\s*local\s+(\w+)\s*=\s*(.+?)\s*$', line)
         if m:
-            variables[m.group(1)] = m.group(2).strip()
+            value = lua_str_value(strip_lua_comment(m.group(2)))
+            if value is not None:
+                variables[m.group(1)] = value
     return variables
 
 
@@ -203,8 +367,8 @@ def parse_binds():
             continue
 
         variables = parse_variables(lines)
-        # Variable valant SUPER ($mainMod) : on la réutilise à la réécriture
-        # pour ne pas mélanger « $mainMod » et « SUPER » dans le fichier.
+        # Variable valant SUPER (mainMod) : on la réutilise à la réécriture
+        # pour ne pas mélanger « mainMod » et « "SUPER" » dans le fichier.
         super_var = next((name for name, value in variables.items()
                           if value.strip().upper() in ("SUPER", "MOD4")), None)
         section = ""
@@ -218,36 +382,43 @@ def parse_binds():
             # Seule la PREMIÈRE ligne d'un bloc de commentaires contigu est
             # retenue : les suivantes prolongent la phrase et donnent des
             # titres absurdes (« côté écran, d'où la lettre voisine. »).
-            if stripped.startswith("#"):
+            if stripped.startswith("--"):
                 if not in_comment_block:
-                    text = stripped.strip("#").strip()
-                    if text and not text.startswith("-") and "http" not in text:
+                    text = stripped.lstrip("-").strip().strip("─").strip()
+                    if text and not text.startswith("#") and "http" not in text:
                         section = shorten_section(text)
                 in_comment_block = True
                 continue
             in_comment_block = False
             if not stripped:
                 continue
-            m = BIND_RE.match(line)
+            m = BIND_RE.match(strip_lua_comment(line))
             if not m:
                 continue
-            parts = split_bind(m.group("body"))
-            if not parts:
+            args = split_lua_args(m.group("body"))
+            if len(args) < 2:
                 continue
-            mods_raw, key, rest = parts
+            keys_expr, dispatcher = args[0], args[1]
+            opts = args[2] if len(args) > 2 else ""
+            combo = keys_expr_to_combo(keys_expr, variables)
+            key = combo_key(combo)
+            # Un bind souris est marqué par l'option `mouse` (ancien `bindm`),
+            # ou porte directement une pseudo-touche mouse:272.
+            is_mouse = key.lower().startswith("mouse") or "mouse" in opts
             binds.append({
                 "file": path,
                 "lineno": lineno,
                 "indent": m.group("indent"),
-                "flags": m.group("flags"),
-                "mods_raw": mods_raw,
-                "mods": normalize_mods(mods_raw, variables),
+                "keys_expr": keys_expr,
+                "dispatcher": dispatcher,
+                "opts": opts,
+                "combo": combo,
+                "mods": normalize_mods(combo),
                 "key": key,
-                "rest": rest,
-                "rest_display": expand_vars(strip_inline_comment(rest), variables),
                 "super_var": super_var,
+                "variables": variables,
                 "section": section,
-                "editable": not key.lower().startswith("mouse"),
+                "editable": not is_mouse,
             })
     return binds
 
@@ -262,19 +433,43 @@ def combo_label(mods, key):
 def action_label(bind):
     """Libellé lisible de ce que fait le bind.
 
-    Pour `exec` on montre la commande (c'est l'information utile) ; pour les
-    dispatchers natifs on traduit le nom et on garde l'argument éventuel.
+    Pour `hl.dsp.exec_cmd` on montre la commande (c'est l'information utile) ;
+    pour les autres dispatchers on traduit le nom et on garde l'argument
+    éventuel — `hl.dsp.group.active({ index = 3 })` donne « Onglet du groupe 3 ».
     """
-    rest = bind["rest_display"].strip().rstrip(",").strip()
-    if not rest:
-        return bind["flags"]
-    head, _, tail = rest.partition(",")
-    head = head.strip()
-    tail = tail.strip().rstrip(",").strip()
-    if head == "exec":
-        return tail or "exec"
-    label = DISPATCHER_LABEL.get(head, head)
-    return "%s %s" % (label, tail) if tail else label
+    text = bind["dispatcher"].strip()
+    m = re.match(r"^hl\.dsp\.([\w.]+)\s*\((?P<args>.*)\)\s*$", text, re.S)
+    if not m:
+        # Une fonction Lua anonyme, ou une forme qu'on ne sait pas lire :
+        # mieux vaut la montrer telle quelle que de mentir sur son effet.
+        return text
+    name, args = m.group(1), m.group("args").strip()
+
+    if name == "exec_cmd":
+        cmd = lua_str_value(args)
+        if cmd is None:
+            # `hl.dsp.exec_cmd(terminal)` : la variable locale porte la
+            # commande réelle, c'est elle qui intéresse le lecteur.
+            cmd = bind.get("variables", {}).get(args.strip(), args)
+        return cmd or "exec"
+
+    # Arguments : soit un littéral ("magic"), soit une table ({ index = 3 }).
+    literal = lua_str_value(args)
+    if literal is not None:
+        arg = literal
+    else:
+        arg = re.sub(r"\s*=\s*", "=", args.strip("{}").strip())
+
+    special = ARG_LABEL.get((name, arg))
+    if special:
+        return special
+
+    label = DISPATCHER_LABEL.get(name, name)
+    if not arg:
+        return label
+    # « direction=left » ou « index=3 » : seule la valeur est parlante.
+    value = arg.split("=", 1)[1].strip() if "=" in arg and "," not in arg else arg
+    return "%s %s" % (label, value.strip('"\''))
 
 
 # ---------------------------------------------------------------- écriture
@@ -296,21 +491,27 @@ def backup(path):
 def rewrite_bind(bind, mods, key):
     """Réécrit la ligne du bind avec la nouvelle combinaison.
 
-    Conserve `$mainMod` si le bind l'utilisait et que Super fait toujours
-    partie de la combinaison, pour ne pas dénaturer le style du fichier.
+    Conserve `mainMod` si le bind l'utilisait et que Super fait toujours
+    partie de la combinaison, pour ne pas dénaturer le style du fichier :
+    `hl.bind(mainMod .. " + SHIFT + R", …)` plutôt que `"SUPER + SHIFT + R"`.
     """
     path = bind["file"]
     with open(path, encoding="utf-8") as f:
         lines = f.read().splitlines(keepends=True)
 
     var = bind["super_var"]
-    tokens = ["$" + var if (mod == "SUPER" and var) else mod for mod in mods]
-    mods_text = " ".join(tokens)
+    uses_var = var is not None and var in bind["keys_expr"]
+    tokens = [m for m in mods] + [key]
+    if "SUPER" in mods and uses_var:
+        rest = " + ".join(t for t in tokens if t != "SUPER")
+        keys_expr = '%s .. " + %s"' % (var, rest) if rest else var
+    else:
+        keys_expr = '"%s"' % " + ".join(tokens)
 
-    body = "%s, %s" % (mods_text, key)
-    if bind["rest"]:
-        body += ", " + bind["rest"]
-    new_line = "%s%s = %s\n" % (bind["indent"], bind["flags"], body)
+    parts = [keys_expr, bind["dispatcher"]]
+    if bind["opts"]:
+        parts.append(bind["opts"])
+    new_line = "%shl.bind(%s)\n" % (bind["indent"], ", ".join(parts))
 
     backup(path)
     lines[bind["lineno"]] = new_line
@@ -321,128 +522,173 @@ def rewrite_bind(bind, mods, key):
         f.writelines(lines)
     os.replace(tmp, path)
 
-    bind["mods_raw"] = mods_text
+    bind["keys_expr"] = keys_expr
+    bind["combo"] = " + ".join(tokens)
     bind["mods"] = mods
     bind["key"] = key
 
 
 def hypr_reload():
     subprocess.run(["hyprctl", "reload"], stdout=DEVNULL, stderr=DEVNULL)
-    plugins = os.path.join(HYPR_DIR, "plugins.conf")
-    if os.path.exists(plugins):
-        # Un reload seul perd la config des plugins : on la re-source.
-        subprocess.run(["hyprctl", "keyword", "source", plugins],
-                       stdout=DEVNULL, stderr=DEVNULL)
+    # Un reload seul perd la config des plugins : load-plugins.sh la réapplique
+    # (`hyprctl eval dofile(plugins.lua)`), comme le faisait le
+    # `hyprctl keyword source plugins.conf` de l'ancien format.
+    loader = os.path.join(HYPR_DIR, "scripts", "load-plugins.sh")
+    if os.path.exists(loader):
+        subprocess.run([loader], stdout=DEVNULL, stderr=DEVNULL)
 
 
 # ---------------------------------------------------------------- UI
 
 
 class KeybindsPopup(LayerPopup):
+    """Les binds Hyprland, groupés par section, en cartes filtrables.
+
+    La ligne entière est cliquable : plus besoin de viser la pastille pour
+    réassigner un raccourci. C'est aussi ce qui permet aux combinaisons de
+    s'aligner à droite sur un fond commun, là où des boutons isolés donnaient
+    une colonne en dents de scie.
+    """
+
     def __init__(self):
         super().__init__("Raccourcis", width=560, margin_right=10)
         apply_extra_css()
 
         self.binds = parse_binds()
         self.capturing = None   # bind en cours de réassignation
-        self.rows = []          # (bind, ligne_widget, bouton_combo, texte_recherche)
+        self.rows = []          # (bind, ligne, carte, texte de recherche)
+        self.sections = []      # (nom, conteneur titre+carte, carte)
 
         self.search = Gtk.SearchEntry()
         self.search.set_placeholder_text("Rechercher une action ou une touche…")
         self.search.connect("search-changed", lambda *_: self._refilter())
         self.box.pack_start(self.search, False, False, 0)
 
-        self.status = Gtk.Label(xalign=0)
-        self.status.get_style_context().add_class("status")
+        self.status = caption_label("")
         self.box.pack_start(self.status, False, False, 0)
-        self._set_status("Clic sur une combinaison pour la réassigner.", None)
+        self._set_status("Clic sur une ligne pour réassigner son raccourci.",
+                         None)
 
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroller.set_min_content_height(560)
-        self.list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        self.list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,
+                                spacing=12)
         scroller.add(self.list_box)
         self.box.pack_start(scroller, True, True, 0)
 
         self._build_rows()
+        self._build_suggestions()
 
     # ---- construction de la liste ----
 
     def _build_rows(self):
         current_section = None
+        card = None
         for bind in self.binds:
-            if bind["section"] != current_section:
+            if bind["section"] != current_section or card is None:
                 current_section = bind["section"]
+                card = Card()
+                wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
                 if current_section:
-                    lbl = Gtk.Label(xalign=0)
-                    lbl.get_style_context().add_class("section")
-                    lbl.set_text(current_section)
-                    self.list_box.pack_start(lbl, False, False, 0)
-                    self.rows.append((None, lbl, None, ""))
+                    wrap.pack_start(section_label(current_section),
+                                    False, False, 0)
+                wrap.pack_start(card, False, False, 0)
+                self.list_box.pack_start(wrap, False, False, 0)
+                self.sections.append((current_section, wrap, card))
 
-            row = Gtk.Box(spacing=8)
-
-            desc = Gtk.Label(xalign=0)
-            desc.get_style_context().add_class("desc")
-            desc.set_ellipsize(3)  # PANGO_ELLIPSIZE_END
-            desc.set_max_width_chars(44)
-            desc.set_text(action_label(bind))
-            desc.set_tooltip_text("%s\n%s:%d" % (
-                bind["rest"], os.path.basename(bind["file"]), bind["lineno"] + 1))
-            row.pack_start(desc, True, True, 0)
-
-            btn = Gtk.Button(label=combo_label(bind["mods"], bind["key"]))
-            btn.get_style_context().add_class("combo")
+            combo = combo_label(bind["mods"], bind["key"])
+            # Aucun de ces raccourcis n'a d'icône : la colonne est supprimée,
+            # pas seulement vidée — 44 px de retrait sur du vide décalaient
+            # tous les libellés vers la droite.
+            row = card.action(None, action_label(bind), value=combo,
+                              tooltip="%s\n%s:%d" % (
+                                  bind["dispatcher"],
+                                  os.path.basename(bind["file"]),
+                                  bind["lineno"] + 1))
+            row.value_label.get_style_context().add_class("combo")
             if bind["editable"]:
-                btn.connect("clicked", self._start_capture, bind)
+                row.connect("clicked", self._start_capture, bind)
             else:
-                btn.get_style_context().add_class("readonly")
-                btn.set_sensitive(False)
-                btn.set_tooltip_text("Bind souris : non réassignable ici")
-            row.pack_end(btn, False, False, 0)
+                row.value_label.get_style_context().add_class("readonly")
+                row.set_sensitive(False)
+                row.set_tooltip_text("Bind souris : non réassignable ici")
 
-            self.list_box.pack_start(row, False, False, 0)
             haystack = " ".join([
-                action_label(bind), combo_label(bind["mods"], bind["key"]),
-                bind["section"], bind["key"],
+                action_label(bind), combo, bind["section"], bind["key"],
             ]).lower()
-            self.rows.append((bind, row, btn, haystack))
+            self.rows.append((bind, row, card, haystack))
+
+    def _build_suggestions(self):
+        """Section finale : les actions utiles restées sans raccourci.
+
+        Rien n'est attribué — les lignes sont inertes, la combinaison est
+        grisée comme celle des binds souris, et l'infobulle donne la ligne
+        `hl.bind` à coller dans hyprland.lua. Une suggestion dont la
+        combinaison est déjà prise n'est pas affichée : soit elle a été
+        adoptée, soit elle entrerait en conflit.
+        """
+        taken = {(tuple(b["mods"]), b["key"].lower()) for b in self.binds}
+        pending = [s for s in SUGGESTIONS
+                   if (tuple(s["mods"]),
+                       s.get("probe", s["key"]).lower()) not in taken]
+        if not pending:
+            return
+
+        card = Card()
+        wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        wrap.pack_start(section_label(SUGGESTIONS_SECTION), False, False, 0)
+        wrap.pack_start(card, False, False, 0)
+        wrap.pack_start(caption_label(
+            "Combinaisons libres, non attribuées : la ligne à coller dans "
+            "hyprland.lua est dans l'infobulle."), False, False, 0)
+        self.list_box.pack_start(wrap, False, False, 0)
+        self.sections.append((SUGGESTIONS_SECTION, wrap, card))
+
+        for sug in pending:
+            combo = combo_label(sug["mods"], sug["key"])
+            row = card.action(None, sug["label"], value=combo,
+                              tooltip=sug["line"])
+            ctx = row.value_label.get_style_context()
+            ctx.add_class("combo")
+            ctx.add_class("readonly")
+            row.set_sensitive(False)
+            self.rows.append((None, row, card, " ".join([
+                sug["label"], combo, SUGGESTIONS_SECTION, sug["key"],
+            ]).lower()))
 
     def _refilter(self):
         needle = self.search.get_text().strip().lower()
-        section_visible = {}
-        # Une section reste visible si au moins un de ses binds correspond.
-        for bind, widget, _btn, haystack in self.rows:
-            if bind is None:
-                continue
-            match = needle in haystack if needle else True
-            widget.set_visible(match)
-            section_visible.setdefault(bind["section"], False)
-            if match:
-                section_visible[bind["section"]] = True
+        touched = set()
+        for _bind, row, card, haystack in self.rows:
+            row.set_visible(needle in haystack if needle else True)
+            touched.add(card)
 
-        current = None
-        for bind, widget, _btn, _hay in self.rows:
-            if bind is None:
-                current = widget.get_text()
-                widget.set_visible(section_visible.get(current, False))
+        # Une carte vide n'a pas à laisser son intertitre flotter seul, et les
+        # filets internes doivent se recaler sur les lignes qui restent.
+        for card in touched:
+            card.sync_separators()
+        for _name, wrap, card in self.sections:
+            visible = any(r.get_visible() for _b, r, c, _h in self.rows
+                          if c is card)
+            wrap.set_visible(visible)
 
     # ---- capture d'une nouvelle combinaison ----
 
-    def _start_capture(self, button, bind):
+    def _start_capture(self, row, bind):
         if self.capturing is not None:
             self._cancel_capture()
-        self.capturing = (bind, button)
-        button.get_style_context().add_class("capturing")
-        button.set_label("Appuyez sur la combinaison…")
+        self.capturing = (bind, row)
+        row.value_label.get_style_context().add_class("capturing")
+        row.value_label.set_text("Appuyez sur la combinaison…")
         self._set_status("Échap pour annuler.", None)
 
     def _cancel_capture(self):
         if self.capturing is None:
             return
-        bind, button = self.capturing
-        button.get_style_context().remove_class("capturing")
-        button.set_label(combo_label(bind["mods"], bind["key"]))
+        bind, row = self.capturing
+        row.value_label.get_style_context().remove_class("capturing")
+        row.value_label.set_text(combo_label(bind["mods"], bind["key"]))
         self.capturing = None
 
     def _set_status(self, text, kind):
@@ -495,7 +741,7 @@ class KeybindsPopup(LayerPopup):
         if not key:
             return True
 
-        bind, _button = self.capturing
+        bind, _row = self.capturing
         clash = self._conflict(bind, mods, key)
         if clash is not None:
             self._set_status(
@@ -528,7 +774,7 @@ class KeybindsPopup(LayerPopup):
         return name.upper() if len(name) == 1 else name
 
     def _apply(self, bind, mods, key):
-        _b, button = self.capturing
+        _b, row = self.capturing
         try:
             rewrite_bind(bind, mods, key)
         except OSError as exc:
@@ -536,17 +782,17 @@ class KeybindsPopup(LayerPopup):
             self._cancel_capture()
             return
 
-        button.get_style_context().remove_class("capturing")
-        button.set_label(combo_label(bind["mods"], bind["key"]))
+        row.value_label.get_style_context().remove_class("capturing")
+        row.value_label.set_text(combo_label(bind["mods"], bind["key"]))
         self.capturing = None
 
         hypr_reload()
         self._set_status("%s → %s (rechargé)" % (
             combo_label(mods, key), action_label(bind)[:40]), "ok")
         # Rafraîchit le texte de recherche associé à la ligne modifiée.
-        for idx, (b, widget, btn, _hay) in enumerate(self.rows):
+        for idx, (b, widget, card, _hay) in enumerate(self.rows):
             if b is bind:
-                self.rows[idx] = (b, widget, btn, " ".join([
+                self.rows[idx] = (b, widget, card, " ".join([
                     action_label(b), combo_label(b["mods"], b["key"]),
                     b["section"], b["key"]]).lower())
                 break
