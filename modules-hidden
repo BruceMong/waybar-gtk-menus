@@ -2,7 +2,6 @@ cpu
 custom/claude
 custom/ws-tens
 disk
-idle_inhibitor
 memory
 power-profiles-daemon
 temperature
