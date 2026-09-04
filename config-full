@@ -84,8 +84,7 @@
     },
 
     "hyprland/workspaces": {
-        "format": "{name}",
-        "on-click": "activate"
+        "format": "{name}"
     },
 
     "hyprland/window": {
@@ -335,7 +334,6 @@
         "exec": "[ -f /tmp/remote-mode-active ] && echo '{\"text\": \"\", \"class\": \"active\"}' || echo '{\"text\": \"\", \"class\": \"inactive\"}'",
         "return-type": "json",
         "interval": "once",
-        "signal": 8,
         "on-click": "~/.config/waybar/remote-mode.sh"
     },
 
@@ -344,7 +342,6 @@
         "return-type": "json",
         "exec": "[ -f /tmp/waybar-ws-tens ] && echo '{\"text\": \"+10\", \"class\": \"active\", \"tooltip\": \"Dizaines (11-20) — clic pour revenir aux unités\"}' || echo '{\"text\": \"+10\", \"class\": \"inactive\", \"tooltip\": \"Unités (1-10) — clic pour passer en +10\"}'",
         "interval": "once",
-        "signal": 7,
         "on-click": "~/.config/waybar/ws-tens-toggle.sh"
     },
 
