@@ -46,8 +46,15 @@ ln -sfn config-active config
 ln -sfn style-normal.css style.css
 
 # --- Exécutables -----------------------------------------------------------
+# `chmod +x ./*.py` rendait aussi exécutables les trois modules importés
+# (tokens.py, menu_common.py, claude_sessions_data.py), qui n'ont pas de point
+# d'entrée et ne se lancent pas seuls. Le critère est objectif : un fichier
+# n'est exécutable que s'il porte un `if __name__ == "__main__"`.
 info "droits d'exécution"
-chmod +x ./*.py ./*.sh
+chmod +x ./*.sh
+for py in ./*.py; do
+    if grep -q '__main__' "$py"; then chmod 755 "$py"; else chmod 644 "$py"; fi
+done
 
 # --- Génération ------------------------------------------------------------
 info "génération de config-active"

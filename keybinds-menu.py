@@ -356,6 +356,44 @@ def parse_variables(lines):
     return variables
 
 
+def section_from_block(block):
+    """Titre de section porté par un bloc de commentaires, ou "" s'il n'en porte pas.
+
+    Un commentaire qui précède des binds n'est pas forcément leur titre, et le
+    prendre systématiquement donnait des en-têtes faux — d'autant qu'un titre
+    retenu restait collé à TOUS les binds suivants jusqu'au commentaire
+    d'après. Constaté sur la capture screenshots/keybinds.png : « Example
+    per-device config », qui commente un `hl.device` de la section INPUT,
+    chapeautait Super+Q ; et l'explication de Super+N, longue de trois lignes,
+    chapeautait les huit raccourcis suivants.
+
+    Deux formes seulement font un titre :
+
+    · un bloc d'UNE ligne (« Fullscreen », « Clipboard history ») — au-delà,
+      c'est une explication du bind qui suit, pas un intitulé de groupe ;
+    · un marqueur explicite « ── Titre ── », qui reste un titre même suivi de
+      son explication.
+
+    Tout le reste — bandeaux `--### SECTION ####`, URL, blocs de plusieurs
+    lignes — ne titre rien et REMET la section à zéro, pour qu'un intitulé
+    périmé ne déborde pas sur la suite du fichier.
+    """
+    for raw in block:
+        text = raw.lstrip("-").strip()
+        if "──" in text:
+            text = text.strip("─").strip()
+            if text and "http" not in text:
+                return shorten_section(text)
+
+    if len(block) != 1:
+        return ""
+
+    text = block[0].lstrip("-").strip().strip("─").strip()
+    if not text or text.startswith("#") or "http" in text:
+        return ""
+    return shorten_section(text)
+
+
 def parse_binds():
     """Renvoie la liste des binds de tous les fichiers source."""
     binds = []
@@ -372,24 +410,17 @@ def parse_binds():
         super_var = next((name for name, value in variables.items()
                           if value.strip().upper() in ("SUPER", "MOD4")), None)
         section = ""
-        in_comment_block = False
+        block = []          # lignes du bloc de commentaires en cours
         for lineno, line in enumerate(lines):
             stripped = line.strip()
-            # Un commentaire seul sert de titre de section pour les binds
-            # suivants. On écarte les séparateurs, les URL et les phrases
-            # trop longues, qui ne font pas des titres lisibles.
-            #
-            # Seule la PREMIÈRE ligne d'un bloc de commentaires contigu est
-            # retenue : les suivantes prolongent la phrase et donnent des
-            # titres absurdes (« côté écran, d'où la lettre voisine. »).
             if stripped.startswith("--"):
-                if not in_comment_block:
-                    text = stripped.lstrip("-").strip().strip("─").strip()
-                    if text and not text.startswith("#") and "http" not in text:
-                        section = shorten_section(text)
-                in_comment_block = True
+                block.append(stripped)
                 continue
-            in_comment_block = False
+            # Fin d'un bloc de commentaires : on décide seulement maintenant
+            # s'il titrait les binds qui suivent, car cela dépend de sa taille.
+            if block:
+                section = section_from_block(block)
+                block = []
             if not stripped:
                 continue
             m = BIND_RE.match(strip_lua_comment(line))
