@@ -46,6 +46,15 @@ mode="watching"
 
 clients=$(hyprctl clients -j 2>/dev/null) || exit 0
 
+# Une fenêtre PiP est déjà là : on s'arrête. Le raccourci de l'extension est
+# une bascule, donc l'envoyer maintenant refermerait le PiP — un clic droit
+# « mets en PiP » qui retire le PiP est un piège, d'autant que la fenêtre porte
+# déjà sa croix pour ça. Même motif que la règle `pip-float` de hyprland.lua :
+# les deux désignent la même fenêtre, elles doivent le dire pareil.
+if jq -e 'any(.[]; .title | test("picture.in.picture"; "i"))' >/dev/null <<<"$clients"; then
+    exit 0
+fi
+
 # `min_by(.focusHistoryID)` = la fenêtre la plus récemment focalisée.
 pick_focused() {
     jq -r --arg cls "$CHROME_CLASS" '

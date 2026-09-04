@@ -13,6 +13,8 @@ faudra redémarrer. Ce menu classe les paquets en trois familles lisibles :
 Les paquets AUR sont comptés à part : ils se recompilent, donc plus lents.
 """
 import os
+import shlex
+import shutil
 import subprocess
 import time
 
@@ -32,6 +34,39 @@ RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
 CACHE = os.path.join(RUNTIME_DIR, "waybar-updates.cache")
 PACMAN_LOG = "/var/log/pacman.log"
 DEVNULL = subprocess.DEVNULL
+
+# Session Claude qui mène la mise à jour. `yay -Syu` installe, mais ne dit pas
+# ce qu'il laisse derrière : .pacnew à fusionner, unité qui ne redémarre plus,
+# annonce Arch demandant une intervention. C'est ce travail-là qu'on délègue,
+# avec la resynchronisation du dépôt de config qui le suit naturellement.
+CLAUDE_BIN = shutil.which("claude")
+# Dépôt de config à resynchroniser ensuite. Absent : la session s'en tient au
+# système, et l'étape 3 du prompt tombe d'elle-même.
+CONFIG_REPO = os.path.expanduser("~/projects/arch-config")
+
+CLAUDE_PROMPT = """%s
+
+1. Regarde d'abord ce qui va être installé (`checkupdates`, `yay -Qua`). Si
+   l'opération retire ou remplace un paquet, ou touche le noyau, nvidia, glibc
+   ou systemd, dis-le-moi avant de lancer quoi que ce soit.
+2. Sinon lance `yay -Syu --noconfirm` en arrière-plan — sudo ne demande pas de
+   mot de passe sur cette machine, et la recompilation AUR est longue. Suis-la
+   jusqu'au bout et rends compte de ce qui a échoué.
+3. Vérifie ensuite ce que la mise à jour laisse à faire : fichiers .pacnew à
+   fusionner (`pacdiff -o`), unités en échec (`systemctl --failed`,
+   `systemctl --user --failed`), paquets orphelins (`pacman -Qtdq`), et les
+   avertissements laissés par les hooks à la fin de /var/log/pacman.log. Lis les
+   annonces récentes d'Arch Linux si une intervention manuelle paraît nécessaire.
+4. Applique enfin le workflow de mise à jour des dépôts décrit dans le CLAUDE.md
+   de ce dépôt : ce qui a changé hors Stow, régénération des listes de paquets et
+   d'APPS.md, contrôle des secrets, commit et push, puis la sync du dépôt public
+   si le package waybar a bougé.
+
+Demande-moi avant toute action destructive ou tout commit inhabituel."""
+
+PROMPT_WITH_UPDATES = "Mets le système à jour, puis fais le suivi."
+PROMPT_NOTHING_TODO = ("Aucun paquet n'est en attente : les points 1 à 3 seront"
+                       " sans doute vides, va au point 4.")
 
 # Briques bas niveau : leur mise à jour ne prend effet qu'après redémarrage
 # (les modules du noyau courant sont supprimés du disque au passage).
@@ -158,6 +193,7 @@ class UpdatesPopup(LayerPopup):
     IC_PENDING = "\U000f0dbe"   # téléchargement en attente
     IC_REFRESH = "\U000f0453"   # actualiser
     IC_UPGRADE = "\U000f06b1"   # tout mettre à jour
+    IC_SUPERVISED = "\U000f0068"  # baguette : mise à jour suivie par Claude
 
     def __init__(self):
         super().__init__("Mises à jour", width=380, margin_right=10)
@@ -185,6 +221,7 @@ class UpdatesPopup(LayerPopup):
             actions = self.add_card()
             actions.action(self.IC_REFRESH, "Vérifier maintenant",
                            on_click=self._refresh)
+            self._add_supervised(actions, upgrade=False)
             return
 
         # -- Résumé --
@@ -252,6 +289,7 @@ class UpdatesPopup(LayerPopup):
         more = self.add_card()
         more.action(self.IC_REFRESH, "Actualiser la liste",
                     on_click=self._refresh)
+        self._add_supervised(more, upgrade=True)
 
     @staticmethod
     def _tint(row, css):
@@ -280,6 +318,35 @@ class UpdatesPopup(LayerPopup):
              "yay -Syu; printf '\\nTerminé — Entrée pour fermer.'; read -r _; "
              "%s --refresh" % UPDATES_SH],
             stdout=DEVNULL, stderr=DEVNULL)
+        self.close()
+
+    def _add_supervised(self, card, upgrade):
+        """Ligne « mise à jour par Claude », si Claude Code est installé."""
+        if not CLAUDE_BIN:
+            return
+        card.action(self.IC_SUPERVISED,
+                    "Mise à jour par Claude" if upgrade else "Resynchroniser la config",
+                    subtitle=("installe, contrôle et resynchronise la config"
+                              if upgrade else "session Claude sur le dépôt de config"),
+                    on_click=lambda _b: self._supervised(upgrade))
+
+    def _supervised(self, upgrade):
+        """Ouvre une session Claude qui mène la mise à jour de bout en bout.
+
+        Elle installe elle-même : `sudo` est en NOPASSWD sur cette machine, donc
+        `yay -Syu --noconfirm` aboutit sans terminal pour y taper un mot de passe.
+        Le terminal reste nécessaire pour la conversation — c'est là que la
+        session demande un arbitrage et qu'on valide ses commandes.
+        """
+        intro = PROMPT_WITH_UPDATES if upgrade else PROMPT_NOTHING_TODO
+        cwd = CONFIG_REPO if os.path.isdir(CONFIG_REPO) else os.path.expanduser("~")
+        script = "%s %s; %s --refresh" % (
+            shlex.quote(CLAUDE_BIN), shlex.quote(CLAUDE_PROMPT % intro),
+            shlex.quote(UPDATES_SH))
+        subprocess.Popen(
+            ["kitty", "--class", "waybar.modules", "--directory", cwd,
+             "-T", "Mise à jour par Claude", "bash", "-c", script],
+            start_new_session=True, stdout=DEVNULL, stderr=DEVNULL)
         self.close()
 
     def _refresh(self, _btn):
