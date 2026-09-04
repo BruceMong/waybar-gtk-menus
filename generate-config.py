@@ -18,12 +18,15 @@ AUTO_HIDDEN_FILE = os.path.join(CONFIG_DIR, "modules-hidden-auto")
 ZONES = ("modules-left", "modules-center", "modules-right")
 
 # Mode "dizaines" (+10) : fichier témoin posé/retiré par ws-tens-toggle.sh
-TENS_FLAG = "/tmp/waybar-ws-tens"
+# État de session : $XDG_RUNTIME_DIR est privé à l'utilisateur et vidé à la
+# déconnexion, là où /tmp est partagé entre comptes et survit à la session.
+RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+TENS_FLAG = os.path.join(RUNTIME_DIR, "waybar-ws-tens")
 TENS_COLOR = "#ebebf0"  # encre primaire (barre monochrome)
 
 # Mode "discret" : fichier témoin posé/retiré par stealth.sh
 # Quand actif, toute la barre est masquée sauf l'œil (clic = ressortir).
-STEALTH_FLAG = "/tmp/waybar-stealth"
+STEALTH_FLAG = os.path.join(RUNTIME_DIR, "waybar-stealth")
 EYE = "custom/toggle-info"
 
 # Groupes dont le premier module n'est qu'une poignée décorative : le groupe
@@ -165,9 +168,22 @@ def filter_groups(cfg, hidden):
 
 
 def read_lines(path):
+    """Lit un fichier « un identifiant de module par ligne ».
+
+    Les lignes vides et les commentaires sont ignorés. Le filtre sur « # » a
+    son importance : modules-priority, le fichier voisin lu par autofit.py, est
+    abondamment commenté, ce qui invite à commenter modules-hidden de la même
+    façon. Sans ce filtre, la ligne de commentaire devenait un identifiant de
+    module fantôme — silencieusement, puisqu'un id inconnu ne masque rien et ne
+    lève aucune erreur.
+    """
     try:
         with open(path, encoding="utf-8") as f:
-            return {line.strip() for line in f if line.strip()}
+            return {
+                line.strip()
+                for line in f
+                if line.strip() and not line.lstrip().startswith("#")
+            }
     except FileNotFoundError:
         return set()
 

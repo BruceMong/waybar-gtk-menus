@@ -4,15 +4,15 @@
 #   up   -> ressort le dernier module caché par CE script
 #
 # Les modules cachés restent accessibles via le popup ⋮.
-# La pile /tmp/waybar-scroll-stack ne contient que les masquages faits ici :
+# La pile $XDG_RUNTIME_DIR/waybar-scroll-stack ne contient que les masquages faits ici :
 # les modules cachés manuellement (menu de l'œil) ne sont jamais ressortis
 # par la molette.
 
 set -euo pipefail
 
 HIDDEN="$HOME/.config/waybar/modules-hidden"
-STACK="/tmp/waybar-scroll-stack"
-LOCK="/tmp/waybar-scroll.lock"
+STACK="${XDG_RUNTIME_DIR:-/tmp}/waybar-scroll-stack"
+LOCK="${XDG_RUNTIME_DIR:-/tmp}/waybar-scroll.lock"
 GEN="$HOME/.config/waybar/generate-config.py"
 
 # Étapes de masquage, de la première à cacher à la dernière : lues depuis

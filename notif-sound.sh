@@ -16,8 +16,8 @@ FLAG="$HOME/.config/waybar/notif-sound.enabled"
 # Le fichier est maintenant généré localement (~/.config/sounds/generate.sh) :
 # deux notes montantes, Sol5 puis Do6. Voir ce script pour le raisonnement.
 SOUND="$HOME/.config/sounds/notification.wav"
-CLEAR_PIDFILE="/tmp/notif-clear-button.pid"
-CLEAR_QUEUE="/tmp/notif-clear-button.queue"
+CLEAR_PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/notif-clear-button.pid"
+CLEAR_QUEUE="${XDG_RUNTIME_DIR:-/tmp}/notif-clear-button.queue"
 
 [ "$(swaync-client --get-dnd 2>/dev/null)" = "true" ] && exit 0
 

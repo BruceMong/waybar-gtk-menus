@@ -7,7 +7,7 @@
 # Régénère config-active (qui adapte filtre + couleur selon l'état) puis
 # recharge waybar via SIGUSR2 (rechargement à chaud, pas de redémarrage).
 
-STATE="/tmp/waybar-ws-tens"
+STATE="${XDG_RUNTIME_DIR:-/tmp}/waybar-ws-tens"
 WAYBAR_DIR="$HOME/.config/waybar"
 
 if [ -f "$STATE" ]; then

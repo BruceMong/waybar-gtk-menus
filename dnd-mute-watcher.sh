@@ -3,7 +3,7 @@
 # Lance par dnd-toggle.sh quand le mode DND est active.
 
 # Ecrit son propre PID pour que dnd-toggle.sh puisse le tuer proprement
-echo $$ > /tmp/dnd-mute-watcher.pid
+echo $$ > "${XDG_RUNTIME_DIR:-/tmp}/dnd-mute-watcher.pid"
 
 mute_zapzap_sinks() {
     local pids

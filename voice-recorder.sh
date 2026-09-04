@@ -11,9 +11,9 @@
 set -u
 
 DIR="${VOICE_REC_DIR:-$HOME/Recordings/meetings}"
-PIDFILE="/tmp/waybar-voicerec.pid"
-PATHFILE="/tmp/waybar-voicerec.path"
-LOGFILE="/tmp/waybar-voicerec.log"
+PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/waybar-voicerec.pid"
+PATHFILE="${XDG_RUNTIME_DIR:-/tmp}/waybar-voicerec.path"
+LOGFILE="${XDG_RUNTIME_DIR:-/tmp}/waybar-voicerec.log"
 BITRATE="48k"
 
 notify() { command -v notify-send >/dev/null && notify-send -a "Enregistreur" "$@"; }
@@ -24,7 +24,7 @@ notify() { command -v notify-send >/dev/null && notify-send -a "Enregistreur" "$
 # une demi-minute à apparaître ou à disparaître.
 wake_watcher() {
     local pid
-    pid=$(cat /tmp/waybar-voicerec-watch.pid 2>/dev/null) || return 0
+    pid=$(cat "${XDG_RUNTIME_DIR:-/tmp}/waybar-voicerec-watch.pid" 2>/dev/null) || return 0
     [ -n "$pid" ] && kill -RTMIN+12 "$pid" 2>/dev/null
     return 0
 }

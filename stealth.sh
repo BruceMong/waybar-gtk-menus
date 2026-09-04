@@ -5,7 +5,7 @@
 set -uo pipefail
 
 CONFIG_DIR="$HOME/.config/waybar"
-FLAG="/tmp/waybar-stealth"
+FLAG="${XDG_RUNTIME_DIR:-/tmp}/waybar-stealth"
 
 case "${1:-toggle}" in
     on)  touch "$FLAG" ;;

@@ -31,8 +31,11 @@ VOL_MAX = 150  # plafond cohérent avec le scroll waybar (-l 1.5)
 # -- Enregistrement de réunion --
 RECORDER = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "voice-recorder.sh")
-REC_PIDFILE = "/tmp/waybar-voicerec.pid"
-REC_PATHFILE = "/tmp/waybar-voicerec.path"
+# État de session : $XDG_RUNTIME_DIR est privé à l'utilisateur et vidé à la
+# déconnexion, là où /tmp est partagé entre comptes et survit à la session.
+RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+REC_PIDFILE = os.path.join(RUNTIME_DIR, "waybar-voicerec.pid")
+REC_PATHFILE = os.path.join(RUNTIME_DIR, "waybar-voicerec.path")
 
 # -- VU-mètre micro (capture PCM légère via parec) --
 METER_RATE = 8000          # Hz, mono : largement suffisant pour un niveau visuel

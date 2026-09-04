@@ -29,7 +29,10 @@ from menu_common import (Card, LayerPopup,  # noqa: E402
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 UPDATES_SH = os.path.join(CONFIG_DIR, "updates.sh")
-CACHE = "/tmp/waybar-updates.cache"
+# État de session : $XDG_RUNTIME_DIR est privé à l'utilisateur et vidé à la
+# déconnexion, là où /tmp est partagé entre comptes et survit à la session.
+RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+CACHE = os.path.join(RUNTIME_DIR, "waybar-updates.cache")
 PACMAN_LOG = "/var/log/pacman.log"
 DEVNULL = subprocess.DEVNULL
 

@@ -23,7 +23,10 @@ from menu_common import LayerPopup  # noqa: E402
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 REMOTE_SH = os.path.join(CONFIG_DIR, "remote-mode.sh")
-REMOTE_FLAG = "/tmp/remote-mode-active"
+# État de session : $XDG_RUNTIME_DIR est privé à l'utilisateur et vidé à la
+# déconnexion, là où /tmp est partagé entre comptes et survit à la session.
+RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+REMOTE_FLAG = os.path.join(RUNTIME_DIR, "remote-mode-active")
 DEVNULL = subprocess.DEVNULL
 
 

@@ -11,6 +11,9 @@ jamais le nombre de popups reellement visibles. On reconstruit donc cet etat
 localement :
 
   - ajout      : hook swaync `run-on: receive` (voir notif-sound.sh) qui
+# État de session : $XDG_RUNTIME_DIR est privé à l'utilisateur et vidé à la
+# déconnexion, là où /tmp est partagé entre comptes et survit à la session.
+RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
                  empile « ID URGENCE » dans QUEUE puis envoie SIGUSR1 ici ;
   - expiration : minuteries calquees sur les timeouts de config.json
                  (timeout / timeout-low / timeout-critical, 0 = jamais) ;
@@ -40,8 +43,8 @@ except (ValueError, ImportError):  # glib < 2.80
     signal_add = GLib.unix_signal_add
 
 SWAYNC_CONFIG = os.path.expanduser("~/.config/swaync/config.json")
-PIDFILE = "/tmp/notif-clear-button.pid"
-QUEUE = "/tmp/notif-clear-button.queue"
+PIDFILE = os.path.join(RUNTIME_DIR, "notif-clear-button.pid")
+QUEUE = os.path.join(RUNTIME_DIR, "notif-clear-button.queue")
 
 # Nombre de popups a l'ecran a partir duquel le bouton apparait.
 THRESHOLD = 2

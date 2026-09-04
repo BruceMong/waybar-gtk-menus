@@ -1,8 +1,15 @@
 #!/bin/bash
 # Toggle mode remote : lock + pas de suspend + luminosité min + barre rouge
 
-STATE_FILE="/tmp/remote-mode-active"
-BRIGHTNESS_SAVE="/tmp/remote-mode-brightness"
+# État de session : $XDG_RUNTIME_DIR est privé à l'utilisateur et vidé à la
+# déconnexion, là où /tmp est partagé entre comptes et survit à la session —
+# un mode remote interrompu brutalement y laissait son témoin « actif » alors
+# que l'inhibiteur, lui, était mort.
+STATE_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+STATE_FILE="$STATE_DIR/remote-mode-active"
+BRIGHTNESS_SAVE="$STATE_DIR/remote-mode-brightness"
+INHIBIT_PID="$STATE_DIR/remote-mode-inhibit-pid"
+DND_SAVE="$STATE_DIR/remote-mode-dnd"
 STYLE_DIR="$HOME/.config/waybar"
 
 # style.css est un lien vers style-normal.css ou style-remote.css, et ce lien
@@ -22,15 +29,15 @@ if [ -f "$STATE_FILE" ]; then
         brightnessctl set "$(cat "$BRIGHTNESS_SAVE")"
         rm "$BRIGHTNESS_SAVE"
     fi
-    kill "$(cat /tmp/remote-mode-inhibit-pid 2>/dev/null)" 2>/dev/null
-    rm -f /tmp/remote-mode-inhibit-pid
+    kill "$(cat "$INHIBIT_PID" 2>/dev/null)" 2>/dev/null
+    rm -f "$INHIBIT_PID"
     rm "$STATE_FILE"
 
     # Restaurer l'état Ne pas déranger d'avant le mode remote
-    if [ "$(cat /tmp/remote-mode-dnd 2>/dev/null)" != "true" ]; then
+    if [ "$(cat "$DND_SAVE" 2>/dev/null)" != "true" ]; then
         "$STYLE_DIR/dnd-toggle.sh" off
     fi
-    rm -f /tmp/remote-mode-dnd
+    rm -f "$DND_SAVE"
 
     # Revenir au style normal
     set_style style-normal.css
@@ -40,12 +47,12 @@ else
     brightnessctl set 1
 
     systemd-inhibit --what=idle:sleep --who="remote-mode" --why="Mode remote actif" --mode=block sleep infinity &
-    echo $! > /tmp/remote-mode-inhibit-pid
+    echo $! > "$INHIBIT_PID"
 
     touch "$STATE_FILE"
 
     # Activer Ne pas déranger (en mémorisant l'état précédent pour le restaurer)
-    swaync-client --get-dnd > /tmp/remote-mode-dnd 2>/dev/null
+    swaync-client --get-dnd > "$DND_SAVE" 2>/dev/null
     "$STYLE_DIR/dnd-toggle.sh" on
 
     # Passer au style remote (barre rouge)

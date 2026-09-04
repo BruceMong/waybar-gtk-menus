@@ -15,9 +15,9 @@
 # Le repos n'en devient pas moins réactif : voice-recorder.sh envoie
 # SIGRTMIN+12 à ce processus (via WATCHPID) au démarrage comme à l'arrêt,
 # ce qui interrompt la sieste et réaffiche immédiatement.
-PIDFILE="/tmp/waybar-voicerec.pid"
-PATHFILE="/tmp/waybar-voicerec.path"
-WATCHPID="/tmp/waybar-voicerec-watch.pid"
+PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/waybar-voicerec.pid"
+PATHFILE="${XDG_RUNTIME_DIR:-/tmp}/waybar-voicerec.path"
+WATCHPID="${XDG_RUNTIME_DIR:-/tmp}/waybar-voicerec-watch.pid"
 IDLE_NAP=30
 
 # Instance unique : le reload SIGUSR2 de waybar relance ce script sans

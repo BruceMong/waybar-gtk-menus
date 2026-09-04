@@ -331,7 +331,7 @@
 
     "custom/remote": {
         "format": "{}",
-        "exec": "[ -f /tmp/remote-mode-active ] && echo '{\"text\": \"\", \"class\": \"active\"}' || echo '{\"text\": \"\", \"class\": \"inactive\"}'",
+        "exec": "[ -f ${XDG_RUNTIME_DIR:-/tmp}/remote-mode-active ] && echo '{\"text\": \"\", \"class\": \"active\"}' || echo '{\"text\": \"\", \"class\": \"inactive\"}'",
         "return-type": "json",
         "interval": "once",
         "on-click": "~/.config/waybar/remote-mode.sh"
@@ -340,7 +340,7 @@
     "custom/ws-tens": {
         "format": "{}",
         "return-type": "json",
-        "exec": "[ -f /tmp/waybar-ws-tens ] && echo '{\"text\": \"+10\", \"class\": \"active\", \"tooltip\": \"Dizaines (11-20) — clic pour revenir aux unités\"}' || echo '{\"text\": \"+10\", \"class\": \"inactive\", \"tooltip\": \"Unités (1-10) — clic pour passer en +10\"}'",
+        "exec": "[ -f ${XDG_RUNTIME_DIR:-/tmp}/waybar-ws-tens ] && echo '{\"text\": \"+10\", \"class\": \"active\", \"tooltip\": \"Dizaines (11-20) — clic pour revenir aux unités\"}' || echo '{\"text\": \"+10\", \"class\": \"inactive\", \"tooltip\": \"Unités (1-10) — clic pour passer en +10\"}'",
         "interval": "once",
         "on-click": "~/.config/waybar/ws-tens-toggle.sh"
     },

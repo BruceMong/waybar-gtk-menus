@@ -8,7 +8,7 @@
 #
 # Waybar ne relaie pas les signaux a ses scripts enfants : on vise donc
 # directement le processus du watcher, via son fichier PID.
-PIDFILE="/tmp/waybar-dnd-watch.pid"
+PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/waybar-dnd-watch.pid"
 PID="$(cat "$PIDFILE" 2>/dev/null)"
 [ -n "$PID" ] && kill -RTMIN+9 "$PID" 2>/dev/null
 exit 0

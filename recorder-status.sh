@@ -19,7 +19,7 @@
 # rester assez courte pour que l'indicateur apparaisse aussitôt la sélection
 # slurp validée. SIGRTMIN+13 est malgré tout accepté, pour le jour où le
 # lancement passera par un wrapper.
-PIDFILE="/tmp/waybar-recorder-watch.pid"
+PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/waybar-recorder-watch.pid"
 IDLE_NAP=3
 
 # Instance unique : le reload SIGUSR2 de waybar relance ce script sans

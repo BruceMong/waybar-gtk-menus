@@ -35,8 +35,11 @@ HIDDEN_FILE = os.path.join(CONFIG_DIR, "modules-hidden")
 AUTO_HIDDEN_FILE = os.path.join(CONFIG_DIR, "modules-hidden-auto")
 PRIORITY_FILE = os.path.join(CONFIG_DIR, "modules-priority")
 GENERATE = os.path.join(CONFIG_DIR, "generate-config.py")
-STEALTH_FLAG = "/tmp/waybar-stealth"
-TENS_FLAG = "/tmp/waybar-ws-tens"
+# État de session : $XDG_RUNTIME_DIR est privé à l'utilisateur et vidé à la
+# déconnexion, là où /tmp est partagé entre comptes et survit à la session.
+RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+STEALTH_FLAG = os.path.join(RUNTIME_DIR, "waybar-stealth")
+TENS_FLAG = os.path.join(RUNTIME_DIR, "waybar-ws-tens")
 
 INTERVAL = 30           # tick de secours en mode --watch (secondes)
 DEBOUNCE = 0.4          # calme à attendre après une rafale d'événements Hyprland
@@ -247,7 +250,7 @@ def window_width():
 
 def updates_width():
     """Le module ne s'affiche que s'il y a des MAJ en attente."""
-    cache = "/tmp/waybar-updates.cache"
+    cache = os.path.join(RUNTIME_DIR, "waybar-updates.cache")
     try:
         with open(cache, encoding="utf-8") as f:
             n = sum(1 for line in f if line.strip() and line.strip() != "---")
@@ -274,7 +277,8 @@ def voice_rec_width():
     à replier un module visible pour loger un module absent.
     """
     try:
-        with open("/tmp/waybar-voicerec.pid", encoding="utf-8") as fh:
+        with open(os.path.join(RUNTIME_DIR, "waybar-voicerec.pid"),
+                  encoding="utf-8") as fh:
             pid = fh.read().strip()
     except OSError:
         return 0

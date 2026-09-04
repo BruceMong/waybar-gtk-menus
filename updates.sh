@@ -10,7 +10,7 @@
 
 set -uo pipefail
 
-CACHE="/tmp/waybar-updates.cache"
+CACHE="${XDG_RUNTIME_DIR:-/tmp}/waybar-updates.cache"
 DIR="$(dirname "$(readlink -f "$0")")"
 
 collect() {

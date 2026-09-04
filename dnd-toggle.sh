@@ -3,8 +3,8 @@
 # Usage : dnd-toggle.sh [on|off|toggle]   (défaut : toggle)
 
 WATCHER="$HOME/.config/waybar/dnd-mute-watcher.sh"
-PID_FILE="/tmp/dnd-mute-watcher.pid"
-SNOOZE_PID="/tmp/dnd-snooze.pid"
+PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/dnd-mute-watcher.pid"
+SNOOZE_PID="${XDG_RUNTIME_DIR:-/tmp}/dnd-snooze.pid"
 
 stop_watcher() {
     if [ -f "$PID_FILE" ]; then

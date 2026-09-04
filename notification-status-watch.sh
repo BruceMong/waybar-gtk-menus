@@ -10,7 +10,7 @@
 # clé "signal", waybar attend la fin du script avant de lire sa sortie — ce
 # script étant continu, le module resterait vide et disparaîtrait de la barre.
 STATUS="$HOME/.config/waybar/notification-status.sh"
-PIDFILE="/tmp/waybar-dnd-watch.pid"
+PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/waybar-dnd-watch.pid"
 
 emit() { "$STATUS"; }
 
