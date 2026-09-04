@@ -161,9 +161,10 @@
 
     "mpris": {
         "format": "{player_icon} {dynamic}",
-        "format-paused": "{status_icon} <i>{dynamic}</i>",
-        "dynamic-len": 20,
-        "max-length": 28,
+        "format-paused": "{player_icon} <i>{dynamic}</i>",
+        "format-stopped": "",
+        "dynamic-len": 16,
+        "max-length": 22,
         "dynamic-order": ["title", "artist"],
         "player-icons": {
             "default": "",
@@ -176,8 +177,11 @@
             "playing": "",
             "stopped": ""
         },
+        "on-click": "~/.config/waybar/media-menu.py",
         "on-click-right": "~/.config/waybar/mpris-pip.sh",
-        "tooltip-format": "{player} : {title} — {artist}\nclic G : lecture/pause | clic D : PiP | molette : piste suiv./préc."
+        "on-scroll-up": "playerctl -p playerctld next",
+        "on-scroll-down": "playerctl -p playerctld previous",
+        "tooltip-format": "{player} : {title} — {artist}\nclic G : menu média | clic D : PiP | molette : piste suiv./préc."
     },
 
     "privacy": {

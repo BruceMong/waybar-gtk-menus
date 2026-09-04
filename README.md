@@ -125,7 +125,7 @@ surfaces, so the cost is limited to the bar and the popups.
 | brightness | `brightnessctl`, `hyprsunset` (night light), `hypridle` |
 | notifications / dnd | `swaync` |
 | updates | `checkupdates` (pacman-contrib), `yay` for AUR counts |
-| media | `playerctl`, Waybar's `mpris` module |
+| media | `playerctl`, Waybar's `mpris` module — title while playing, greyed while paused, nothing when stopped. Left click opens `media-menu.py` (track, prev / play-pause / next); scroll skips tracks, middle click goes back, right click toggles Chrome PiP |
 | systemd | `systemctl --user` / system units |
 | keybindings | Hyprland config in `~/.config/hypr` |
 | claude | Claude Code + the hooks in `claude-hooks/` |
@@ -160,7 +160,8 @@ Never edit `config-active` — it is regenerated. Edit `config-full`, then run
 - `modules-hidden` — one module id per line, hidden permanently (set from the
   `⋮` menu).
 - `modules-priority` — order in which `autofit.py` folds modules away when the
-  bar overflows; last line goes first.
+  bar overflows; **first** line goes first (`compute()` reads the file top to
+  bottom, most expendable first).
 - `style-normal.css` / `style-remote.css` — themes, swapped by `remote-mode.sh`.
 
 Hardware paths are **detected, not hardcoded**: `"hwmon-path-abs": "auto"` in

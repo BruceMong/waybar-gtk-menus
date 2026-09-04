@@ -60,7 +60,11 @@ MODULES = [
     Module(["custom/chrome"], "\U000f02af", "Chrome",
            "setsid -f google-chrome-stable"),
     Module(["hyprland/window"], "\U000f05d0", "Fenêtre"),
-    Module(["mpris"], "\U000f0387", "Média", "playerctl play-pause"),
+    # transient : le module s'efface de lui-même dès qu'aucun lecteur ne
+    # tourne (`format-stopped` vide dans config-full), et son menu doit
+    # rester joignable pour autant.
+    Module(["mpris"], "\U000f0387", "Média",
+           _script("media-menu.py"), transient=True),
     Module(["clock#time"], "\U000f0954", "Heure",
            _script("calendar-menu.py") + " 60"),
     Module(["clock#date"], "\U000f00ed", "Date",

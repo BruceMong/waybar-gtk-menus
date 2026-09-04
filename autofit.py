@@ -44,7 +44,10 @@ TENS_FLAG = os.path.join(RUNTIME_DIR, "waybar-ws-tens")
 
 INTERVAL = 30           # tick de secours en mode --watch (secondes)
 DEBOUNCE = 0.4          # calme à attendre après une rafale d'événements Hyprland
-SAFETY = 48             # marge de sécurité (px logiques) : couvre l'imprécision
+SAFETY = 32             # marge de sécurité (px logiques) : couvre l'imprécision
+                        # résiduelle des gabarits — relevée à ~1 % par comparaison
+                        # avec une capture d'écran de la barre. Elle valait 48 quand
+                        # deux gabarits faux (mpris, pulseaudio#mic) la gonflaient.
 HYSTERESIS = 32         # place à regagner en plus avant de ressortir un module
 RELOAD_GAP = 5          # délai minimal entre deux rechargements de waybar
 FONT = "SF Pro Text"    # police de la barre (cf. style-normal.css)
@@ -213,12 +216,44 @@ def workspaces_width():
     return n * per_button + 4 + PAD_MODULE   # #workspaces padding: 0 2px
 
 
+# Chaîne de calibrage du module média : vingt caractères d'un vrai titre,
+# c'est-à-dire la longueur que `dynamic-len` autorise, dans une casse mixte
+# ordinaire. Le gabarit valait auparavant "M" * 20 — le pire cas absolu, que
+# seul un titre tout en majuscules larges atteindrait : 220 px contre 130 pour
+# un titre réel. Ces 90 px fantômes suffisaient à faire replier le module par
+# le premier tour de boucle, barre à moitié vide.
+MPRIS_SAMPLE = "Nothing Else Ma"   # 16 caractères = `dynamic-len` de config-full
+
+
 def mpris_width():
-    players = run(["playerctl", "-l"])
-    if not players:
+    """Place réservée au module média : rien, ou la largeur du titre.
+
+    Le module rend le titre en lecture et l'icône seule en pause (config-full),
+    mais on lui compte la largeur du titre dans les deux cas. Mesurer l'état
+    courant ferait replier puis ressortir un module à chaque play/pause — et
+    chaque bascule recharge waybar (SIGUSR2), donc la barre disparaît une
+    seconde. Même raisonnement que window_width : une largeur constante vaut
+    mieux qu'une largeur juste. La place n'est vraiment rendue que lorsqu'il
+    n'y a plus aucun lecteur, ou qu'ils sont tous arrêtés — là, le module
+    disparaît pour de bon.
+    """
+    status = run(["playerctl", "-a", "status"])
+    if not status or not ("Playing" in status or "Paused" in status):
         return 0
-    # format "{icon} {dynamic}" avec dynamic-len 20, borné par max-length 28.
-    return measure_text("\U000f0230 " + "M" * 20, 13) + PAD_MODULE
+    return measure_text("\U000f0230 " + MPRIS_SAMPLE, 13) + PAD_MODULE
+
+
+def mic_width():
+    """Micro coupé : sinon `format-source` est vide et le module disparaît.
+
+    Sans ce calcul, `pulseaudio#mic` tombait sur le gabarit de repli ("MMMM",
+    56 px) et occupait donc en permanence la place d'un module qui n'existe
+    qu'une fois le micro muté.
+    """
+    out = run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"])
+    if "MUTED" not in out:
+        return 0
+    return max(measure_text("\U000f036d", 14), MIN_ICON) + PAD_MODULE
 
 
 _WINDOW_WIDTH = None
@@ -339,6 +374,7 @@ DYNAMIC = {
     "clock#time": clock_time_width,
     "custom/calendar": calendar_width,
     "mpris": mpris_width,
+    "pulseaudio#mic": mic_width,
     "hyprland/window": window_width,
     "custom/updates": updates_width,
     "systemd-failed-units": failed_units_width,
