@@ -82,7 +82,7 @@ ICON_CELL = {
     "cpu", "network", "pulseaudio#icon", "custom/tray-handle",
     "custom/toggle-info", "custom/keybinds", "backlight", "battery",
     "idle_inhibitor", "power-profiles-daemon", "custom/chrome",
-    "custom/power", "custom/remote",
+    "custom/power",
 }
 
 # Gabarit de mesure par module : (texte affiché, padding horizontal total,

@@ -329,14 +329,6 @@
         "on-click": "setsid -f google-chrome-stable"
     },
 
-    "custom/remote": {
-        "format": "{}",
-        "exec": "[ -f ${XDG_RUNTIME_DIR:-/tmp}/remote-mode-active ] && echo '{\"text\": \"\", \"class\": \"active\"}' || echo '{\"text\": \"\", \"class\": \"inactive\"}'",
-        "return-type": "json",
-        "interval": "once",
-        "on-click": "~/.config/waybar/remote-mode.sh"
-    },
-
     "custom/ws-tens": {
         "format": "{}",
         "return-type": "json",

@@ -60,17 +60,6 @@ window#waybar {
     font-weight: 600;
 }
 
-/* ── Le bouton de sortie du mode remote : le seul à devoir sauter aux yeux ── */
-#custom-remote.active {
-    color: #7a1120;
-    background-color: rgba(255, 255, 255, 0.88);
-    font-weight: 600;
-}
-
-#custom-remote.active:hover {
-    background-color: #ffffff;
-    color: #7a1120;
-}
 
 /* ── Extinction : le survol rouge de la barre normale disparaîtrait ici ── */
 #custom-power:hover {

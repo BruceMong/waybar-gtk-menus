@@ -100,7 +100,6 @@ window#waybar {
 #custom-claude,
 #custom-dnd,
 #custom-power,
-#custom-remote,
 #custom-recorder,
 #custom-voice-rec,
 #custom-updates,
@@ -189,7 +188,6 @@ window#waybar {
 #custom-claude:hover,
 #custom-dnd:hover,
 #custom-power:hover,
-#custom-remote:hover,
 #custom-recorder:hover,
 #custom-voice-rec:hover,
 #custom-updates:hover,
@@ -218,7 +216,6 @@ window#waybar {
 #custom-chrome:active,
 #custom-claude:active,
 #custom-dnd:active,
-#custom-remote:active,
 #custom-recorder:active,
 #custom-voice-rec:active,
 #custom-updates:active,
@@ -424,8 +421,7 @@ window#waybar {
 #idle_inhibitor,
 #power-profiles-daemon,
 #custom-chrome,
-#custom-power,
-#custom-remote {
+#custom-power {
     font-size: 14px;
     font-weight: 500;
     min-width: 22px;
@@ -609,20 +605,6 @@ window#waybar {
     color: @inkSel;
 }
 
-/* ── Mode remote ── */
-#custom-remote {
-    color: @ink3;
-}
-
-#custom-remote.active {
-    color: @sysRed;
-    background-color: @fill;
-}
-
-#custom-remote.active:hover {
-    background-color: @fillHard;
-    color: @sysRed;
-}
 
 /* ── Sessions Claude Code ──
    Toujours en encre pleine, quel que soit l'état. « 2/8 » et « 8 » se lisent
