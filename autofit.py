@@ -38,6 +38,7 @@ GENERATE = os.path.join(CONFIG_DIR, "generate-config.py")
 # État de session : $XDG_RUNTIME_DIR est privé à l'utilisateur et vidé à la
 # déconnexion, là où /tmp est partagé entre comptes et survit à la session.
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+CLOCK_12H_FLAG = os.path.join(CONFIG_DIR, "clock-12h")
 STEALTH_FLAG = os.path.join(RUNTIME_DIR, "waybar-stealth")
 TENS_FLAG = os.path.join(RUNTIME_DIR, "waybar-ws-tens")
 
@@ -95,14 +96,15 @@ ICON_CELL = {
 SPECS = {
     "custom/ws-tens":          ("+10", PAD_MODULE, 13),
     "custom/chrome":           ("\U000f00af", PAD_MODULE, 14),
-    "clock#time":              ("00:00", PAD_MODULE, 13),
-    "clock#date":              ("mar. 01 sept.", PAD_MODULE, 13),
+    "clock#time":              ("", PAD_MODULE, 13),
+    "clock#date":              ("", PAD_MODULE, 13),
     "custom/tray-handle":      ("\U000f0141", PAD_ICON, 14),
     "custom/dots":             ("⋮ 9", PAD_IN_GROUP, 14),
     "custom/toggle-info":      ("\U000f0208", PAD_ICON, 14),
     "custom/keybinds":         ("\U000f030c", PAD_ICON, 14),
     "custom/dnd":              ("\U000f009a 99+", PAD_STATUS, 13),
     "custom/claude":           ("\U000f051f 00/00", PAD_STATUS, 13),
+    "custom/calendar":         ("", PAD_STATUS, 13),
     "cpu":                     ("\U000f0ee0", PAD_ICON, 14),
     "temperature":             ("\U000f10c3 100°C", PAD_IN_GROUP, 13),
     "memory":                  ("\U000f035b 100%", PAD_IN_GROUP, 13),
@@ -294,8 +296,48 @@ def recorder_width():
     return measure_text("\U000f0567 00:00", 13) + PAD_MODULE
 
 
+# Les deux moitiés de l'horloge vivent dans group/datetime : 7px de padding
+# côté extérieur, 2px côté intérieur (style-normal.css), et un plancher de
+# min-width que la mesure du texte ne doit pas passer sous silence.
+CLOCK_PAD = 7 + 2
+
+
+def clock_date_width():
+    return max(measure_text("mar. 01 sept.", 13), 84) + CLOCK_PAD
+
+
+def clock_time_width():
+    """« 00:00 » ou « 00:00 PM » selon le format choisi dans le menu.
+
+    Pas de plancher ici : l'heure n'a pas de `min-width`, cf. le commentaire
+    du CSS.
+    """
+    text = "00:00 PM" if os.path.exists(CLOCK_12H_FLAG) else "00:00"
+    return measure_text(text, 13) + CLOCK_PAD
+
+
+def calendar_width():
+    """Prochain rendez-vous : le module n'existe qu'à moins de deux heures.
+
+    La largeur vient de calendar_agenda.width_hint(), qui réserve la place du
+    texte le plus large que l'événement en tête produira — voir là-bas
+    pourquoi mesurer le texte courant ferait osciller le repli.
+    """
+    if CONFIG_DIR not in sys.path:
+        sys.path.insert(0, CONFIG_DIR)
+    try:
+        import calendar_agenda
+        text = calendar_agenda.width_hint()
+    except Exception:                                       # noqa: BLE001
+        return 0
+    return measure_text(text, 13) + PAD_STATUS if text else 0
+
+
 DYNAMIC = {
     "hyprland/workspaces": workspaces_width,
+    "clock#date": clock_date_width,
+    "clock#time": clock_time_width,
+    "custom/calendar": calendar_width,
     "mpris": mpris_width,
     "hyprland/window": window_width,
     "custom/updates": updates_width,

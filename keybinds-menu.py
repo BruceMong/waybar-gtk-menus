@@ -23,17 +23,17 @@ collée à la main dans hyprland.lua.
 import os
 import re
 import shutil
-import signal
 import subprocess
 
 import gi
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
-from gi.repository import Gtk, Gdk, GLib  # noqa: E402
+from gi.repository import Gtk, Gdk  # noqa: E402
 
 from menu_common import (Card, LayerPopup,  # noqa: E402
-                         caption_label, section_label)
+                         arm_exit_watchdog, caption_label,
+                         run_popup, section_label)
 
 HYPR_DIR = os.path.expanduser("~/.config/hypr")
 # plugins.lua ne contient plus de bind : les raccourcis des dispatchers de
@@ -559,6 +559,100 @@ def rewrite_bind(bind, mods, key):
     bind["key"] = key
 
 
+# Repli hyprlang conservé depuis la migration Lua du 2026-09-02 : il ne sert
+# qu'un jour où le .lua casse, c'est-à-dire au pire moment pour découvrir qu'il
+# est périmé. Réassigner un raccourci n'y touchait pas, et rien ne le signalait.
+MIRROR = os.path.join(HYPR_DIR, "hyprland.conf")
+
+# `bind = $mainMod SHIFT, F, fullscreen, 1` — modificateurs séparés par des
+# espaces, avant la première virgule.
+CONF_BIND_RE = re.compile(
+    r"^(?P<head>\s*bind[a-z]*\s*=\s*)(?P<mods>[^,]*),(?P<sp>\s*)"
+    r"(?P<key>[^,\n]*?)(?P<tail>\s*(?:,.*)?)$")
+
+
+def _conf_variables(lines):
+    """Variables hyprlang « $nom = valeur » du fichier de repli."""
+    variables = {}
+    for line in lines:
+        m = re.match(r"^\s*\$(\w+)\s*=\s*([^#\n]+)", line)
+        if m:
+            variables["$" + m.group(1)] = m.group(2).strip()
+    return variables
+
+
+def _expand(mods, variables):
+    """« $mainMod SHIFT » -> « SUPER+SHIFT ».
+
+    Le séparateur est un « + » et non l'espace d'origine : c'est sur lui que
+    découpe normalize_mods, écrit pour les combinaisons du .lua. Lui passer la
+    forme hyprlang telle quelle rendait une liste vide de modificateurs, et
+    seuls les binds à un seul modificateur (ALT, Tab) trouvaient leur miroir —
+    tous les `$mainMod SHIFT, …` passaient à travers.
+    """
+    parts = []
+    for tok in mods.split():
+        parts.extend(variables.get(tok, tok).split())
+    return "+".join(parts)
+
+
+def mirror_bind(old_mods, old_key, new_mods, new_key):
+    """Reporte une réassignation dans hyprland.conf. Renvoie le nombre de lignes.
+
+    Le dépôt impose que les deux configurations restent en parité : `.lua` est
+    lu par Hyprland, `.conf` est le filet. Une divergence ne se voit pas — d'où
+    ce report automatique, et l'avertissement affiché quand aucune ligne ne
+    correspond (bind ajouté d'un seul côté, forme que le motif ne sait pas
+    lire : à reporter alors à la main).
+
+    Plusieurs lignes peuvent porter la même combinaison — `ALT, Tab` en a deux,
+    cyclenext puis bringactivetotop : toutes sont réécrites, pas seulement la
+    première.
+    """
+    try:
+        with open(MIRROR, encoding="utf-8") as f:
+            lines = f.read().splitlines(keepends=True)
+    except OSError:
+        return 0
+
+    variables = _conf_variables(lines)
+    # Nom de la variable valant SUPER, pour ne pas remplacer « $mainMod » par
+    # « SUPER » en clair et dénaturer le style du fichier.
+    super_var = next((name for name, value in variables.items()
+                      if value.upper() in ("SUPER", "MOD4")), None)
+    target = (tuple(old_mods), old_key.lower())
+
+    hits = []
+    for i, line in enumerate(lines):
+        m = CONF_BIND_RE.match(line.rstrip("\n"))
+        if not m:
+            continue
+        expanded = _expand(m.group("mods"), variables)
+        if (tuple(normalize_mods(expanded)),
+                m.group("key").strip().lower()) != target:
+            continue
+        uses_var = super_var is not None and super_var in m.group("mods")
+        if "SUPER" in new_mods and uses_var:
+            rest = [x for x in new_mods if x != "SUPER"]
+            mods_text = " ".join([super_var] + rest)
+        else:
+            mods_text = " ".join(new_mods)
+        newline = "%s%s,%s%s%s\n" % (m.group("head"), mods_text, m.group("sp"),
+                                     new_key, m.group("tail"))
+        hits.append((i, newline))
+
+    if not hits:
+        return 0
+    backup(MIRROR)
+    for i, newline in hits:
+        lines[i] = newline
+    tmp = MIRROR + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+    os.replace(tmp, MIRROR)
+    return len(hits)
+
+
 def hypr_reload():
     subprocess.run(["hyprctl", "reload"], stdout=DEVNULL, stderr=DEVNULL)
     # Un reload seul perd la config des plugins : load-plugins.sh la réapplique
@@ -806,6 +900,7 @@ class KeybindsPopup(LayerPopup):
 
     def _apply(self, bind, mods, key):
         _b, row = self.capturing
+        old_mods, old_key = list(bind["mods"]), bind["key"]
         try:
             rewrite_bind(bind, mods, key)
         except OSError as exc:
@@ -813,13 +908,22 @@ class KeybindsPopup(LayerPopup):
             self._cancel_capture()
             return
 
+        # Le repli hyprlang doit suivre, sinon il devient faux en silence.
+        mirrored = mirror_bind(old_mods, old_key, mods, key)
+
         row.value_label.get_style_context().remove_class("capturing")
         row.value_label.set_text(combo_label(bind["mods"], bind["key"]))
         self.capturing = None
 
         hypr_reload()
-        self._set_status("%s → %s (rechargé)" % (
-            combo_label(mods, key), action_label(bind)[:40]), "ok")
+        if mirrored:
+            self._set_status("%s → %s (rechargé)" % (
+                combo_label(mods, key), action_label(bind)[:40]), "ok")
+        else:
+            self._set_status(
+                "%s appliqué — mais rien à reporter dans hyprland.conf : "
+                "le repli est à corriger à la main."
+                % combo_label(mods, key), "err")
         # Rafraîchit le texte de recherche associé à la ligne modifiée.
         for idx, (b, widget, card, _hay) in enumerate(self.rows):
             if b is bind:
@@ -829,15 +933,21 @@ class KeybindsPopup(LayerPopup):
                 break
 
     def run(self):
+        """Comme LayerPopup.run(), mais le focus va d'emblée à la recherche.
+
+        Le watchdog de sortie n'est pas optionnel : sans lui, ce menu était le
+        seul à pouvoir rester affiché et insensible si GTK se bloquait dans
+        son dernier aller-retour Wayland (cf. arm_exit_watchdog).
+        """
         self.connect("destroy", Gtk.main_quit)
+        self.connect("destroy", lambda *_: arm_exit_watchdog())
         self.show_all()
         self.search.grab_focus()
         Gtk.main()
 
 
 def main():
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-    KeybindsPopup().run()
+    run_popup(KeybindsPopup, "waybar-keybinds-menu")
 
 
 if __name__ == "__main__":

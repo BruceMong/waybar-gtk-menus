@@ -4,8 +4,8 @@
 Réglages de notification : Ne pas déranger (switch + minuteries 30 min / 1 h),
 son des notifications, effet « Notif Claude → fenêtre ».
 
-La pile de notifications vit dans le centre swaync (clic gauche sur la cloche)
-et pas ici : ce popup ne fait que les réglages.
+La pile elle-même vit dans le centre swaync : ce popup ne fait que les
+réglages, et se contente d'y mener par sa dernière carte.
 """
 import os
 import signal
@@ -13,7 +13,7 @@ import subprocess
 
 # menu_common fixe lui-même la version de GTK et fournit tout ce qui sert
 # ici : ce popup n'a plus une seule ligne de widget à écrire à la main.
-from menu_common import LayerPopup
+from menu_common import LayerPopup, run_popup
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 DND_TOGGLE = os.path.join(CONFIG_DIR, "dnd-toggle.sh")
@@ -39,6 +39,8 @@ class NotificationPopup(LayerPopup):
     IC_TIMER = "\U000f051b"    # minuteur
     IC_SOUND = "\U000f057e"    # haut-parleur
     IC_CLAUDE = "\U000f09d1"   # cerveau
+    IC_CENTER = "\U000f009a"   # cloche
+    IC_CLEAR = "\U000f01b4"    # balai
 
     def __init__(self):
         super().__init__("Notifications", width=340, margin_right=360)
@@ -59,6 +61,29 @@ class NotificationPopup(LayerPopup):
         # Actif tant que le drapeau « disabled » est absent.
         prefs.toggle(self.IC_CLAUDE, "Notif Claude → fenêtre",
                      not os.path.exists(CLAUDE_FLAG), self._on_claude_toggled)
+
+        # La pile elle-même vit dans swaync. Le clic gauche sur la cloche y
+        # mène déjà, mais ce popup s'ouvre au clic DROIT : sans ces deux
+        # lignes, il fallait le refermer et viser à nouveau l'icône pour
+        # simplement lire ses notifications.
+        pile = self.add_card()
+        pile.action(self.IC_CENTER, "Centre de notifications", chevron=True,
+                    on_click=self._open_center)
+        pile.action(self.IC_CLEAR, "Tout effacer",
+                    subtitle="vide la pile et le centre",
+                    on_click=self._clear_all)
+
+    # ---- Pile de notifications ----
+
+    def _open_center(self, _btn):
+        subprocess.Popen(["swaync-client", "--toggle-panel"],
+                         stdout=DEVNULL, stderr=DEVNULL)
+        self.close()
+
+    def _clear_all(self, _btn):
+        subprocess.Popen(["swaync-client", "--close-all"],
+                         stdout=DEVNULL, stderr=DEVNULL)
+        self.close()
 
     # ---- État ----
 
@@ -129,8 +154,7 @@ class NotificationPopup(LayerPopup):
 
 
 def main():
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-    NotificationPopup().run()
+    run_popup(NotificationPopup, "waybar-notification-menu")
 
 
 if __name__ == "__main__":

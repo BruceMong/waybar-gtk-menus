@@ -13,8 +13,6 @@ faudra redémarrer. Ce menu classe les paquets en trois familles lisibles :
 Les paquets AUR sont comptés à part : ils se recompilent, donc plus lents.
 """
 import os
-import re
-import signal
 import subprocess
 import time
 
@@ -24,8 +22,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib  # noqa: E402
 
-from menu_common import (Card, LayerPopup,  # noqa: E402
-                         caption_label, custom_row)
+from menu_common import Card, LayerPopup, run_popup  # noqa: E402
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 UPDATES_SH = os.path.join(CONFIG_DIR, "updates.sh")
@@ -291,8 +288,7 @@ class UpdatesPopup(LayerPopup):
 
 
 def main():
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-    UpdatesPopup().run()
+    run_popup(UpdatesPopup, "waybar-updates-menu")
 
 
 if __name__ == "__main__":

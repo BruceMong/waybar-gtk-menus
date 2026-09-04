@@ -10,14 +10,13 @@ double.
 
 import subprocess
 import os
-import signal
 import re
 import gi
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib  # noqa: E402
 
-from menu_common import LayerPopup  # noqa: E402
+from menu_common import LayerPopup, run_popup  # noqa: E402
 
 TEMP_FILE = os.path.expanduser("~/.cache/hyprsunset-temp")
 KBD_DEVICE = "tpacpi::kbd_backlight"
@@ -397,8 +396,7 @@ class BrightnessPopup(LayerPopup):
 
 
 def main():
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-    BrightnessPopup().run()
+    run_popup(BrightnessPopup, "waybar-brightness-menu")
 
 
 if __name__ == "__main__":

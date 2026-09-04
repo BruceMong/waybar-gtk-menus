@@ -1,5 +1,5 @@
 #!/bin/bash
-# Affiche les top 10 processus consommant le plus de RAM via dunst
+# Affiche les 10 processus les plus gourmands en RAM, en notification.
 
 details=$(ps axo rss,comm --no-headers | awk '{mem[$2]+=$1} END {for(p in mem) printf "%d %s\n", mem[p]/1024, p}' | sort -rn | head -10 | awk '{printf "%-6s Mo  %s\n", $1, $2}')
 

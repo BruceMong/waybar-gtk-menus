@@ -29,6 +29,11 @@ TENS_COLOR = "#ebebf0"  # encre primaire (barre monochrome)
 STEALTH_FLAG = os.path.join(RUNTIME_DIR, "waybar-stealth")
 EYE = "custom/toggle-info"
 
+# Format de l'heure : drapeau posé par le menu de l'horloge (calendar-menu.py).
+# Fichier plutôt que clé de config parce que c'est un réglage de machine, pas
+# une décision de dépôt — au même titre que modules-hidden-auto.
+CLOCK_12H_FLAG = os.path.join(CONFIG_DIR, "clock-12h")
+
 # Groupes dont le premier module n'est qu'une poignée décorative : le groupe
 # n'a plus de sens si tout son contenu réel est masqué.
 GROUP_HANDLES = {"group/systray": "custom/tray-handle"}
@@ -103,6 +108,24 @@ def apply_temperature(cfg):
     else:
         temp.pop("hwmon-path-abs", None)
         temp.pop("input-filename", None)
+
+
+def apply_clock_format(cfg):
+    """Heure sur 12 h (AM/PM) tant que le drapeau est là, sur 24 h sinon.
+
+    La locale bascule avec le format : en français `%p` ne rend rien du tout
+    — « 06:42 » suivi d'un espace, le matin ne se distinguant plus du soir.
+    Seul ce module change de locale ; sa grille de calendrier au survol passe
+    en anglais avec lui, ce qui est le prix du choix, la date d'à côté restant
+    française.
+    """
+    clock = cfg.get("clock#time")
+    if not clock or not os.path.exists(CLOCK_12H_FLAG):
+        return
+    # %I et non %-I : le modificateur GNU qui supprime le zéro initial n'est
+    # pas compris par le formateur de waybar, qui rend alors un module vide.
+    clock["format"] = "{:%I:%M %p}"
+    clock["locale"] = "en_US.UTF-8"
 
 
 def apply_stealth(cfg):
@@ -193,6 +216,7 @@ def main():
         cfg = json.load(f)
 
     apply_defaults(cfg)
+    apply_clock_format(cfg)     # après apply_defaults : il en surcharge la locale
     apply_temperature(cfg)
 
     manual = read_lines(HIDDEN_FILE)

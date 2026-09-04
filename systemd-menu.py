@@ -9,7 +9,7 @@ dans le presse-papier, à coller tel quel dans un chat avec un assistant.
 import datetime
 import os
 import re
-import signal
+import shlex
 import subprocess
 
 import gi
@@ -18,7 +18,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib  # noqa: E402
 
 from menu_common import (Card, LayerPopup,  # noqa: E402
-                         caption_label, control_row, custom_row)
+                         caption_label, control_row, run_popup)
 
 DEVNULL = subprocess.DEVNULL
 TERM_CLASS = "journal-view"
@@ -355,21 +355,41 @@ class SystemdPopup(LayerPopup):
 
         GLib.timeout_add(1800, restore)
 
+    def _run_async(self, cmds, label, delay=900):
+        """Lance des systemctl sans bloquer la boucle GTK, puis reconstruit.
+
+        Une unité de portée *system* passe par polkit : l'agent ouvre sa propre
+        fenêtre, ce qui fait perdre le focus au popup — donc le ferme — pendant
+        qu'un `subprocess.run` gardait la boucle GTK figée en attendant une
+        saisie devenue impossible à voir. Et l'échec (autorisation refusée)
+        partait dans /dev/null : le bouton semblait ne rien faire.
+
+        Les commandes sont donc enchaînées dans un shell détaché, et le
+        résultat arrive en notification — la seule voie qui survit à la
+        fermeture du popup.
+        """
+        script = " && ".join(" ".join(shlex.quote(a) for a in cmd)
+                             for cmd in cmds)
+        subprocess.Popen(
+            ["bash", "-c",
+             "%s || notify-send -i dialog-error 'Unités systemd' %s"
+             % (script, shlex.quote("Échec : %s" % label))],
+            stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
+        GLib.timeout_add(delay, self._refresh)
+
     def _restart(self, scope, unit):
-        subprocess.run(_systemctl(scope, "restart", unit),
-                       stdout=DEVNULL, stderr=DEVNULL)
-        GLib.timeout_add(800, self._refresh)
+        self._run_async([_systemctl(scope, "restart", unit)],
+                        "redémarrage de %s" % unit)
 
     def _reset(self, scope, unit):
-        subprocess.run(_systemctl(scope, "reset-failed", unit),
-                       stdout=DEVNULL, stderr=DEVNULL)
-        self._refresh()
+        self._run_async([_systemctl(scope, "reset-failed", unit)],
+                        "acquittement de %s" % unit, delay=500)
 
     def _reset_all(self, units):
-        for scope, unit, _desc in units:
-            subprocess.run(_systemctl(scope, "reset-failed", unit),
-                           stdout=DEVNULL, stderr=DEVNULL)
-        self._refresh()
+        self._run_async(
+            [_systemctl(scope, "reset-failed", unit)
+             for scope, unit, _desc in units],
+            "acquittement des %d unités" % len(units), delay=500)
 
     def _refresh(self):
         self._build()
@@ -378,8 +398,7 @@ class SystemdPopup(LayerPopup):
 
 
 def main():
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-    SystemdPopup().run()
+    run_popup(SystemdPopup, "waybar-systemd-menu")
 
 
 if __name__ == "__main__":

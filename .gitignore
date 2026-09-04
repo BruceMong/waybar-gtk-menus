@@ -6,6 +6,7 @@ __pycache__/
 modules-hidden-auto
 notif-sound.enabled
 claude-notify-focus.disabled
+clock-12h
 
 # Sauvegardes et anciennes versions
 legacy/

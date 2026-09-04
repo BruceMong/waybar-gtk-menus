@@ -16,39 +16,25 @@ from gi.repository import Gtk, Gio, Gdk, GLib  # noqa: E402
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 HIDDEN_FILE = os.path.join(CONFIG_DIR, "modules-hidden")
-ACTIVE = os.path.join(CONFIG_DIR, "config-active")
+# Cible du lien `config`, écrite en RELATIF. Un chemin absolu ferait deux
+# dégâts : il sortirait le fichier de la gestion Stow (cf. CLAUDE.md, qui
+# documente déjà la même erreur pour remote-mode.sh et stealth.sh), et il
+# écrirait « /home/<user>/ » dans un fichier publié tel quel en dépôt public —
+# ce que le garde-fou de sync-waybar-public.sh refuse, à juste titre.
+ACTIVE = "config-active"
 LINK = os.path.join(CONFIG_DIR, "config")
 GEN = os.path.join(CONFIG_DIR, "generate-config.py")
 STEALTH = os.path.join(CONFIG_DIR, "stealth.sh")
 
 APP_ID = "waybar.modules"
 
-# (label, [ids de module waybar]). Workspaces et l'œil restent toujours visibles.
-MODULES = [
-    ("Bouton +10", ["custom/ws-tens"]),
-    ("Chrome", ["custom/chrome"]),
-    ("Fenêtre", ["hyprland/window"]),
-    ("Média", ["mpris"]),
-    ("Heure", ["clock#time"]),
-    ("Date", ["clock#date"]),
-    ("Confidentialité", ["privacy"]),
-    ("Tray", ["tray"]),
-    ("Notifications", ["custom/dnd"]),
-    ("CPU", ["cpu"]),
-    ("Température", ["temperature"]),
-    ("RAM", ["memory"]),
-    ("Disque", ["disk"]),
-    ("Services en échec", ["systemd-failed-units"]),
-    ("Mises à jour", ["custom/updates"]),
-    ("Réseau", ["network"]),
-    ("Bluetooth", ["bluetooth"]),
-    ("Son", ["pulseaudio#icon", "pulseaudio#percentage"]),
-    ("Luminosité", ["backlight"]),
-    ("Caféine", ["idle_inhibitor"]),
-    ("Profil énergie", ["power-profiles-daemon"]),
-    ("Batterie", ["battery"]),
-    ("Power", ["custom/power"]),
-]
+# La liste des modules masquables vient de modules_registry.py, partagé avec le
+# menu « ⋮ ». Tenue ici à la main, elle avait fini par contenir des modules que
+# le ⋮ ne connaissait pas (une fois cachés, plus aucun moyen d'y accéder) et
+# par en oublier d'autres — le micro et les sessions Claude n'étaient masquables
+# nulle part. Workspaces, l'œil et les poignées de tiroir n'y figurent pas :
+# ils portent `hideable=False`.
+from modules_registry import hideable  # noqa: E402
 
 # Modules cachés d'un coup par le bouton « accès rapide ».
 QUICK_HIDE = ["cpu", "temperature", "memory", "network", "clock#date",
@@ -80,11 +66,20 @@ def save_hidden(hidden):
 
 
 def ensure_symlink():
+    """Garantit `config -> config-active`, sans jamais casser le lien Stow.
+
+    Le lien vit dans le même dossier que sa cible : la forme relative suffit,
+    et c'est la seule qui survive au déplacement du dépôt. Cette fonction
+    posait un lien absolu, si bien que la première bascule de module dans ce
+    menu suffisait à réécrire le lien du dépôt — visible dans `git status`
+    juste après, avec le chemin personnel dedans.
+    """
     try:
-        if not (os.path.islink(LINK) and os.readlink(LINK) == ACTIVE):
-            if os.path.lexists(LINK):
-                os.remove(LINK)
-            os.symlink(ACTIVE, LINK)
+        if os.path.islink(LINK) and os.readlink(LINK) == ACTIVE:
+            return
+        if os.path.lexists(LINK):
+            os.remove(LINK)
+        os.symlink(ACTIVE, LINK)
     except OSError:
         pass
 
@@ -385,13 +380,15 @@ class ModuleWindow(Gtk.ApplicationWindow):
 
         hidden = load_hidden()
         folded = load_folded()
-        for label, ids in MODULES:
+        for module in hideable():
+            ids = module.ids
             # Un module replié par autofit reste « visible » ici (le choix de
             # l'utilisateur est intact) mais n'est pas dans la barre : sans
             # cette mention, l'interrupteur semble mentir.
             note = ("replié — pas la place"
                     if any(i in folded for i in ids) else None)
-            sw = card.toggle(label, not any(i in hidden for i in ids), note)
+            sw = card.toggle(module.label,
+                             not any(i in hidden for i in ids), note)
             handler = sw.connect("state-set", self.on_toggle, ids)
             self.switches.append((sw, ids, handler))
 
@@ -511,6 +508,19 @@ class ModuleApp(Gtk.Application):
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
     def do_activate(self):
+        """Ouvre la fenêtre, ou la referme si elle est déjà là.
+
+        L'identifiant d'application rend l'instance unique : un second
+        lancement ne crée pas de processus, il rappelle cette méthode dans le
+        premier. La fenêtre était alors simplement ramenée au premier plan —
+        recliquer sur l'œil ne la fermait donc jamais, alors que les douze
+        popups de la barre basculent tous depuis qu'ils partagent
+        `run_popup`. Un même geste, deux comportements : c'est l'œil qui avait
+        tort.
+        """
+        if self.win is not None and self.win.get_visible():
+            self.win.close()
+            return
         if self.win is None:
             self.win = ModuleWindow(self)
         else:

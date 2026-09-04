@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Popup Wi-Fi pour Waybar (style menu luminosité / notifications).
+"""Popup Réseau pour Waybar (style menu luminosité / notifications).
 
 Fenêtre overlay ancrée en haut à droite avec :
   - interrupteur Wi-Fi (radio on/off)
@@ -8,6 +8,8 @@ Fenêtre overlay ancrée en haut à droite avec :
       * réseau connu / ouvert  -> connexion directe
       * réseau sécurisé inconnu -> champ mot de passe en ligne
       * clic droit -> se déconnecter / oublier le réseau
+  - liens filaires (état du câble, connexion / déconnexion)
+  - profils VPN et WireGuard, activables d'un clic
   - bouton « Rafraîchir » (rescan)
   - actions : Connexions (GUI), nmtui, Redémarrer NetworkManager, Recharger driver
 
@@ -16,11 +18,9 @@ Tout appel à nmcli passe par un thread de travail : `nmcli dev wifi list
 gelait la fenêtre (clics ignorés, fenêtre marquée non-répondante par le
 compositeur) — c'était la cause principale des « bugs » du menu.
 """
-import fcntl
 import os
 import re
 import shlex
-import signal
 import subprocess
 import threading
 import time
@@ -30,15 +30,9 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib, Pango  # noqa: E402
 
-try:                                    # GLib.unix_signal_add est déprécié
-    gi.require_version("GLibUnix", "2.0")
-    from gi.repository import GLibUnix
-    unix_signal_add = GLibUnix.signal_add
-except (ValueError, ImportError):       # PyGObject plus ancien
-    unix_signal_add = GLib.unix_signal_add
-
 from menu_common import (Card, LayerPopup,  # noqa: E402
-                         caption_label, custom_row)
+                         caption_label, custom_row, run_popup,
+                         section_label)
 
 DEVNULL = subprocess.DEVNULL
 
@@ -81,6 +75,48 @@ def wifi_iface():
         if typ == "wifi":
             return dev
     return ""
+
+
+def wired_links():
+    """Interfaces filaires réelles, avec leur état. [(device, state, conn)]
+
+    Le module de la barre s'appelle `network` et affiche l'ethernet ; le menu,
+    lui, ne parlait que du Wi-Fi. Brancher un câble ne se voyait donc nulle
+    part, et il fallait ouvrir nmtui pour savoir si le lien était monté.
+
+    Les ponts et les `veth` de Docker sont écartés : ce sont des interfaces
+    ethernet aux yeux de NetworkManager, mais il n'y a rien à y faire depuis un
+    menu de barre — et elles noieraient la vraie carte réseau sous dix lignes.
+    """
+    links = []
+    for line in run(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION",
+                     "device"]).splitlines():
+        f = parse_terse(line)
+        if len(f) < 4 or f[1] != "ethernet":
+            continue
+        if f[2].startswith("unmanaged") or f[0].startswith(("veth", "docker",
+                                                            "br-")):
+            continue
+        links.append((f[0], f[2], f[3]))
+    return links
+
+
+def vpn_connections():
+    """Profils VPN / WireGuard connus, actifs d'abord. [(name, uuid, active)]"""
+    active = set()
+    for line in run(["nmcli", "-t", "-f", "NAME,TYPE",
+                     "connection", "show", "--active"]).splitlines():
+        f = parse_terse(line)
+        if len(f) >= 2 and f[1] in ("vpn", "wireguard"):
+            active.add(f[0])
+    vpns = []
+    for line in run(["nmcli", "-t", "-f", "NAME,UUID,TYPE",
+                     "connection", "show"]).splitlines():
+        f = parse_terse(line)
+        if len(f) >= 3 and f[2] in ("vpn", "wireguard"):
+            vpns.append((f[0], f[1], f[0] in active))
+    vpns.sort(key=lambda v: (not v[2], v[0].lower()))
+    return vpns
 
 
 def wifi_driver(iface):
@@ -167,11 +203,14 @@ def scan_networks(rescan=False):
 
 
 def collect_state(rescan=False):
-    """Photographie complète de l'état Wi-Fi (appelée hors thread GTK)."""
-    on = radio_on()
-    if not on:
-        return {"radio": False, "nets": [], "known": {}}
-    return {"radio": True, "nets": scan_networks(rescan), "known": known_connections()}
+    """Photographie complète de l'état réseau (appelée hors thread GTK)."""
+    state = {"wired": wired_links(), "vpn": vpn_connections()}
+    if not radio_on():
+        state.update(radio=False, nets=[], known={})
+        return state
+    state.update(radio=True, nets=scan_networks(rescan),
+                 known=known_connections())
+    return state
 
 
 def signal_icon(sig):
@@ -224,6 +263,8 @@ class NetworkPopup(LayerPopup):
     IC_RESTART = "\U000f0709"   # redémarrage du service
     IC_DRIVER = "\U000f0a0b"    # puce : le pilote, pas un simple rafraîchissement
     IC_LOCK = "\U000f0341"      # cadenas
+    IC_WIRED = "\U000f0200"     # prise réseau
+    IC_VPN = "\U000f0582"       # tunnel chiffré
 
     def __init__(self):
         super().__init__("Wi-Fi", width=360, margin_right=110)
@@ -233,7 +274,9 @@ class NetworkPopup(LayerPopup):
         self._busy = False       # opération bloquante (connexion, radio, oubli)
         self._scanning = False   # scan en cours : la liste reste utilisable
         self._sig = None         # signature de la liste affichée (anti-clignotement)
-        self._state = {"radio": False, "nets": [], "known": {}}
+        self._state = {"radio": False, "nets": [], "known": {},
+                       "wired": [], "vpn": []}
+        self._extras_sig = None  # signature des cartes filaire / VPN
         self._pending = None     # SSID en attente de mot de passe
         self._auth_failed = False  # le dernier échec venait-il du secret ?
         self._sync_switch = False
@@ -266,6 +309,14 @@ class NetworkPopup(LayerPopup):
         self.net_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.scroller.add(self.net_box)
         self.box.pack_start(self.scroller, True, True, 0)
+
+        # -- Filaire et VPN --
+        # Hors du défilement des réseaux : ce sont des liens qu'on a ou qu'on
+        # n'a pas, pas une liste où choisir. Les cartes n'apparaissent que si
+        # la machine a effectivement une carte ethernet ou un profil VPN.
+        self.extras_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,
+                                  spacing=12)
+        self.box.pack_start(self.extras_box, False, False, 0)
 
         # -- Actions sur un réseau (clic droit), cachées par défaut --
         # Un Gtk.Menu contextuel se positionne mal au-dessus d'une surface
@@ -451,6 +502,102 @@ class NetworkPopup(LayerPopup):
         self.sw.set_active(state["radio"])
         self._sync_switch = False
         self._render_nets()
+        self._render_extras()
+
+    def _render_extras(self):
+        """Cartes « Filaire » et « VPN », reconstruites seulement si besoin."""
+        state = self._state
+        wired = state.get("wired") or []
+        vpn = state.get("vpn") or []
+        sig = (tuple(wired), tuple(vpn))
+        if sig == self._extras_sig:
+            return
+        self._extras_sig = sig
+
+        for child in self.extras_box.get_children():
+            child.destroy()
+
+        if wired:
+            card = Card()
+            for dev, st, conn in wired:
+                up = st.startswith("connect")
+                card.action(
+                    self.IC_WIRED, conn if up else dev,
+                    value=dev if up else self._wired_label(st),
+                    selected=up,
+                    tooltip=("Connecté en filaire — clic : déconnecter" if up
+                             else "Cliquer pour activer ce lien"),
+                    on_click=(lambda _b, d=dev, u=up: self._toggle_wired(d, u)))
+            self._add_extra("Filaire", card)
+
+        if vpn:
+            card = Card()
+            for name, uuid, active in vpn:
+                card.action(
+                    self.IC_VPN, name, selected=active,
+                    value="actif" if active else None,
+                    tooltip=("Cliquer pour se déconnecter" if active
+                             else "Cliquer pour se connecter"),
+                    on_click=(lambda _b, u=uuid, a=active:
+                              self._toggle_vpn(u, a)))
+            self._add_extra("VPN", card)
+
+        self.extras_box.show_all()
+
+    @staticmethod
+    def _wired_label(state):
+        if state.startswith("unavailable"):
+            return "câble débranché"
+        if state.startswith("disconnected"):
+            return "inactif"
+        return state.split(" ")[0]
+
+    def _add_extra(self, title, card):
+        wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        wrap.pack_start(section_label(title), False, False, 0)
+        wrap.pack_start(card, False, False, 0)
+        self.extras_box.pack_start(wrap, False, False, 0)
+
+    def _toggle_wired(self, device, up):
+        cmd = (["nmcli", "device", "disconnect", device] if up
+               else ["nmcli", "-w", CONNECT_WAIT, "device", "connect", device])
+        self._simple_action(cmd, "Déconnexion de %s…" % device if up
+                            else "Connexion filaire…")
+
+    def _toggle_vpn(self, uuid, active):
+        verb = "down" if active else "up"
+        self._simple_action(
+            ["nmcli", "-w", CONNECT_WAIT, "connection", verb, "uuid", uuid],
+            "Déconnexion du VPN…" if active else "Connexion au VPN…")
+
+    def _simple_action(self, cmd, message):
+        """Commande nmcli courte dont on ne veut que le succès ou l'échec."""
+        self._set_busy(True)
+        self._set_status(message, busy=True)
+
+        def work():
+            proc = subprocess.run(cmd, capture_output=True, text=True,
+                                  timeout=CONNECT_TIMEOUT)
+            if proc.returncode != 0:
+                out = (proc.stdout or proc.stderr or "").strip().splitlines()
+                return (False, out[-1] if out else "échec")
+            return (True, collect_state(rescan=False))
+
+        def done(res):
+            self._set_busy(False)
+            if isinstance(res, Exception):
+                self._set_status("Erreur : %s" % res, error=True)
+                return
+            ok, payload = res
+            if not ok:
+                self._set_status("Échec : %s" % payload, error=True)
+                return
+            self._set_status("")
+            self._sig = None
+            self._extras_sig = None
+            self._apply_state(payload)
+
+        self._in_thread(work, done)
 
     def _render_nets(self):
         state = self._state
@@ -789,43 +936,8 @@ class NetworkPopup(LayerPopup):
         self.close()
 
 
-def single_instance(name):
-    """Verrou d'instance unique, avec bascule.
-
-    Waybar relance le script à chaque clic sur l'icône : sans verrou, deux
-    popups se superposaient, chacune avec sa couche de fermeture plein écran
-    et le clavier en mode exclusif — d'où des clics qui « ne passaient pas ».
-    Un second lancement ferme donc l'instance en place et rend la main.
-    """
-    path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), name + ".lock")
-    f = open(path, "a+")
-    try:
-        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        f.seek(0)
-        try:
-            os.kill(int(f.read().strip()), signal.SIGTERM)
-        except (ValueError, ProcessLookupError, PermissionError):
-            pass
-        return None
-    f.seek(0)
-    f.truncate()
-    f.write(str(os.getpid()))
-    f.flush()
-    return f
-
-
 def main():
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-    lock = single_instance("waybar-network-menu")
-    if lock is None:
-        return
-    win = NetworkPopup()
-    # SIGTERM (envoyé par le lancement suivant) : fermeture propre plutôt
-    # qu'une fenêtre tuée en laissant sa couche de fermeture à l'écran.
-    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM,
-                    lambda *_: (win.close(), False)[1])
-    win.run()
+    run_popup(NetworkPopup, "waybar-network-menu")
 
 
 if __name__ == "__main__":

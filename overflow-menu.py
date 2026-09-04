@@ -1,10 +1,22 @@
 #!/usr/bin/env python3
-"""Popup « ⋮ » : lanceur des modules cachés de la waybar.
+"""Popup « ⋮ » : lanceur des modules absents de la barre.
 
-Lit modules-hidden et liste les modules actuellement masqués. Cliquer sur une
-ligne lance l'action normale du module (son menu / son on-click) — comme s'il
-était dans la barre — puis ferme le popup. Les modules restent cachés de la
-barre ; seul leur accès reste disponible ici.
+Deux raisons de ne pas voir un module, et le popup répond aux deux :
+
+  - il est CACHÉ (œil, molette, repli automatique d'autofit) : la première
+    carte le liste, cliquer lance son action normale — son menu, son on-click —
+    comme s'il était dans la barre. Il reste caché ; seul son accès revient ;
+  - il PEUT N'AVOIR RIEN À DIRE : `custom/updates` s'efface quand tout est à
+    jour, `systemd-failed-units` quand aucune unité n'échoue, `custom/claude`
+    et `custom/calendar` quand rien ne tourne ni n'approche. Ceux-là n'entrent
+    pas dans modules-hidden et n'apparaissaient donc nulle part quand ils
+    s'effaçaient : plus moyen de forcer une vérification des mises à jour tant
+    qu'il n'y en avait aucune. Ils ont leur carte, listée en permanence — leur
+    présence dans la barre dépend de l'instant, pas leur accessibilité.
+
+L'inventaire vient de modules_registry.py, partagé avec le menu de l'œil. Deux
+listes séparées avaient fini par diverger : `custom/ws-tens`, masquable par
+l'œil, ne figurait pas ici — une fois caché, il n'était plus joignable.
 
 La grille d'emoji couleur a laissé place à une liste : trois tuiles par rangée
 imposaient de lire les noms en zigzag, et les emoji — seuls éléments colorés de
@@ -15,42 +27,13 @@ import subprocess
 
 # menu_common fixe la version de GTK et fournit les cartes : ce popup n'a plus
 # aucun widget à assembler à la main.
-from menu_common import LayerPopup, apply_css, caption_label
+from menu_common import LayerPopup, caption_label, run_popup
+from modules_registry import MODULES
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 HIDDEN_FILE = os.path.join(CONFIG_DIR, "modules-hidden")
 AUTO_HIDDEN_FILE = os.path.join(CONFIG_DIR, "modules-hidden-auto")
-WB = CONFIG_DIR
 
-# (ids waybar concernés, icône, label, action shell ou None si rien à lancer).
-# Les actions reprennent les on-click définis dans config-full.
-REGISTRY = [
-    (["custom/chrome"], "\U000f02af", "Chrome", "setsid -f google-chrome-stable"),
-    (["hyprland/window"], "\U000f05d0", "Fenêtre", None),
-    (["mpris"], "\U000f0387", "Média", "playerctl play-pause"),
-    (["clock#time"], "\U000f0954", "Heure",
-     "google-chrome-stable https://calendar.google.com"),
-    (["clock#date"], "\U000f00ed", "Date",
-     "google-chrome-stable https://calendar.google.com"),
-    (["privacy"], "\U000f0208", "Confidentialité", None),
-    (["tray"], "\U000f02e3", "Tray", None),
-    (["custom/dnd"], "\U000f009a", "Notifications", WB + "/notification-menu.py"),
-    (["cpu"], "\U000f0322", "CPU", WB + "/system-monitor.sh"),
-    (["temperature"], "\U000f050f", "Température", WB + "/system-monitor.sh"),
-    (["memory"], "\U000f035b", "RAM", WB + "/system-monitor.sh"),
-    (["disk"], "\U000f02ca", "Disque", None),
-    (["systemd-failed-units"], "\U000f0026", "Services", None),
-    (["custom/updates"], "\U000f03d7", "Mises à jour", WB + "/updates.sh --menu"),
-    (["network"], "\U000f05a9", "Réseau", WB + "/network-menu.py"),
-    (["bluetooth"], "\U000f00af", "Bluetooth", "blueman-manager"),
-    (["pulseaudio#icon", "pulseaudio#percentage"], "\U000f057e", "Son",
-     WB + "/sound-menu.py"),
-    (["backlight"], "\U000f00e0", "Luminosité", WB + "/brightness-menu.py"),
-    (["idle_inhibitor"], "\U000f0176", "Caféine", WB + "/caffeine-toggle.sh"),
-    (["power-profiles-daemon"], "\U000f0241", "Profil énergie", None),
-    (["battery"], "\U000f0079", "Batterie", WB + "/battery-menu.py"),
-    (["custom/power"], "\U000f0425", "Power", WB + "/power-menu.py"),
-]
 
 def load_hidden():
     """Modules cachés à la main (œil / molette) + repliés par autofit.py."""
@@ -69,24 +52,45 @@ class OverflowMenu(LayerPopup):
         super().__init__("Modules cachés", width=300, margin_right=110)
 
         hidden = load_hidden()
-        entries = [e for e in REGISTRY if any(i in hidden for i in e[0])]
+        cached = [m for m in MODULES if any(i in hidden for i in m.ids)]
+        # Un module à état déjà listé comme caché n'a pas à l'être deux fois.
+        transient = [m for m in MODULES
+                     if m.transient and m not in cached and m.action]
 
-        card = self.add_card()
-        if not entries:
-            card.custom(caption_label("Aucun module caché."))
-            return
+        if cached:
+            card = self.add_card()
+            for module in cached:
+                self._add(card, module)
+        else:
+            self.add_card().custom(caption_label("Aucun module caché."))
 
-        for _ids, icon, name, action in entries:
-            # Un module sans action (Tray, Disque…) n'est pas lançable : la
-            # ligne reste, grisée, plutôt que de disparaître — sa présence
-            # dans la liste dit qu'il est caché, ce qui est déjà une réponse.
-            row = card.action(
-                icon, name, chevron=bool(action),
-                on_click=(lambda _b, a=action: self._on_launch(_b, a))
-                if action else None)
-            if not action:
-                row.set_sensitive(False)
-                row.set_tooltip_text("Ce module n'a pas d'action à lancer")
+        if transient:
+            # Titre volontairement neutre : ces modules-là peuvent très bien
+            # être visibles dans la barre au moment où l'on regarde (il y a
+            # des mises à jour, une session tourne). « Rien à signaler »
+            # aurait été faux une fois sur deux ; ce qui est vrai dans tous
+            # les cas, c'est que leur menu s'ouvre d'ici même quand leur icône
+            # s'est effacée.
+            card = self.add_card("Autres menus")
+            for module in transient:
+                self._add(card, module)
+            self.box.pack_start(
+                caption_label("Ces modules disparaissent de la barre quand "
+                              "ils n'ont rien à dire."), False, False, 0)
+
+    def _add(self, card, module):
+        # Un module sans action (Tray, Disque…) n'est pas lançable : la ligne
+        # reste, grisée, plutôt que de disparaître — sa présence dans la liste
+        # dit qu'il est caché, ce qui est déjà une réponse.
+        action = module.action
+        row = card.action(
+            module.icon, module.label, chevron=bool(action),
+            on_click=(lambda _b, a=action: self._on_launch(_b, a))
+            if action else None)
+        if not action:
+            row.set_sensitive(False)
+            row.set_tooltip_text("Ce module n'a pas d'action à lancer")
+        return row
 
     def _on_launch(self, _btn, action):
         subprocess.Popen(action, shell=True, start_new_session=True,
@@ -95,8 +99,7 @@ class OverflowMenu(LayerPopup):
 
 
 def main():
-    apply_css()
-    OverflowMenu().run()
+    run_popup(OverflowMenu, "waybar-overflow-menu")
 
 
 if __name__ == "__main__":

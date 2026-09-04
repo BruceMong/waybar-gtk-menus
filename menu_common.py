@@ -11,6 +11,7 @@ haut à droite, avec :
 """
 
 import atexit
+import fcntl
 import os
 import re
 import signal
@@ -23,6 +24,13 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("GtkLayerShell", "0.1")
 from gi.repository import Gtk, Gdk, GLib, Pango, GtkLayerShell  # noqa: E402
+
+try:                                    # GLib.unix_signal_add est déprécié
+    gi.require_version("GLibUnix", "2.0")
+    from gi.repository import GLibUnix
+    unix_signal_add = GLibUnix.signal_add
+except (ValueError, ImportError):       # PyGObject plus ancien
+    unix_signal_add = GLib.unix_signal_add
 
 import tokens  # noqa: E402
 
@@ -657,6 +665,26 @@ def action_row(icon, title, subtitle=None, value=None, chevron=False,
     return btn
 
 
+def info_row(icon, title, subtitle=None, value=None, markup=False):
+    """Ligne de pur constat : même gabarit qu'une ligne d'action, mais inerte.
+
+    Rendre une `action_row` insensible aurait fait l'affaire visuellement, à
+    ceci près que `:disabled` atténue le texte — or une ligne qui *informe*
+    n'est pas une ligne indisponible, elle doit rester la plus lisible de la
+    carte. D'où une ligne statique, comme celle des interrupteurs, mais sans
+    accessoire à droite.
+    """
+    row = Gtk.Box(spacing=ROW_SPACING)
+    ctx = row.get_style_context()
+    ctx.add_class("row")
+    ctx.add_class("static")
+    body, refs = _row_body(icon, title, subtitle, value, markup=markup)
+    row.pack_start(body, True, True, 0)
+    for name, widget in refs.items():
+        setattr(row, name, widget)
+    return row
+
+
 def switch_row(icon, title, active, handler, subtitle=None, green=False):
     """Ligne inerte portant un interrupteur. Renvoie (ligne, interrupteur)."""
     row = Gtk.Box(spacing=ROW_SPACING)
@@ -782,6 +810,10 @@ class Card(Gtk.Box):
         row, sw = switch_row(icon, title, active, handler, **kwargs)
         self.add_row(row, separator=separator)
         return sw
+
+    def info(self, icon, title, separator=True, **kwargs):
+        return self.add_row(info_row(icon, title, **kwargs),
+                            separator=separator)
 
     def custom(self, child, separator=True, flush=False, margins=True):
         return self.add_row(custom_row(child, margins=margins),
@@ -1024,3 +1056,60 @@ class LayerPopup(Gtk.Window):
         self.show_all()
         self._grab_first_focus()
         Gtk.main()
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Lancement : une seule instance à la fois, et le clic qui rouvre referme
+# ══════════════════════════════════════════════════════════════════════════
+
+def single_instance(name):
+    """Verrou d'instance unique, avec bascule.
+
+    Waybar relance le script à chaque clic sur l'icône. Sans verrou, deux
+    popups se superposaient : la barre est un layer qui ne prend pas le focus
+    clavier, donc le premier popup ne le perd jamais et ne se ferme pas de
+    lui-même. Recliquer sur l'icône empilait une seconde fenêtre au lieu de
+    refermer la première — vérifié, deux processus vivants pour deux clics.
+
+    Un second lancement termine donc l'instance en place et rend la main :
+    l'icône de la barre devient une bascule, comme on l'attend d'un menu.
+
+    Renvoie le fichier de verrou (à garder référencé le temps du popup), ou
+    None s'il faut sortir immédiatement.
+    """
+    path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"),
+                        name + ".lock")
+    f = open(path, "a+")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.seek(0)
+        try:
+            os.kill(int(f.read().strip()), signal.SIGTERM)
+        except (ValueError, ProcessLookupError, PermissionError):
+            pass
+        return None
+    f.seek(0)
+    f.truncate()
+    f.write(str(os.getpid()))
+    f.flush()
+    return f
+
+
+def run_popup(factory, lock_name):
+    """Ouvre un popup en instance unique, et le referme si on le relance.
+
+    `factory` est appelé seulement une fois le verrou obtenu : construire la
+    fenêtre pour la détruire aussitôt ferait clignoter une surface à l'écran.
+    """
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    lock = single_instance(lock_name)
+    if lock is None:
+        return None
+    win = factory()
+    # SIGTERM (envoyé par le lancement suivant) : fermeture propre plutôt
+    # qu'une fenêtre tuée en laissant le réglage follow_mouse détaché.
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM,
+                    lambda *_: (win.close(), False)[1])
+    win.run()
+    return win

@@ -4,14 +4,13 @@
 Actions courantes faites maison :
   - volume haut-parleur (slider) + Muet
   - volume micro (slider) + Micro coupé
-  - choix de la sortie audio (si plusieurs périphériques)
+  - choix de la sortie et de l'entrée audio (si plusieurs périphériques)
   - enregistrement de réunion (micro + sortie audio, canaux séparés)
 Et un bouton « Réglages avancés » qui ouvre pavucontrol (le menu complet).
 """
 import array
 import os
 import re
-import signal
 import subprocess
 import threading
 
@@ -21,7 +20,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, GLib  # noqa: E402
 
 from menu_common import (LayerPopup, caption_label,  # noqa: E402
-                         section_label)
+                         run_popup, section_label)
 
 DEVNULL = subprocess.DEVNULL
 SINK = "@DEFAULT_AUDIO_SINK@"
@@ -78,19 +77,39 @@ def source_exists():
     return bool(re.search(r"Volume:", run(["wpctl", "get-volume", SOURCE])))
 
 
-def list_sinks():
-    """Renvoie [(name, description, is_default)]."""
-    default = run(["pactl", "get-default-sink"]).strip()
-    sinks, name = [], None
-    for line in run(["pactl", "list", "sinks"]).splitlines():
+def _list_devices(kind):
+    """Périphériques pulse d'un type donné : [(name, description, is_default)].
+
+    `kind` vaut "sinks" ou "sources" ; les deux se lisent exactement pareil,
+    d'où la fonction commune. Le menu ne proposait le choix que pour la sortie,
+    et il fallait ouvrir pavucontrol pour désigner un micro — alors que c'est
+    le geste le plus fréquent des deux quand un casque vient d'être branché.
+    """
+    default = run(["pactl", "get-default-%s" % kind[:-1]]).strip()
+    devices, name = [], None
+    for line in run(["pactl", "list", kind]).splitlines():
         s = line.strip()
         if s.startswith("Name:"):
             name = s.split(None, 1)[1] if len(s.split(None, 1)) > 1 else ""
         elif s.startswith("Description:") and name is not None:
             desc = s.split(None, 1)[1] if len(s.split(None, 1)) > 1 else name
-            sinks.append((name, desc, name == default))
+            devices.append((name, desc, name == default))
             name = None
-    return sinks
+    return devices
+
+
+def list_sinks():
+    return _list_devices("sinks")
+
+
+def list_sources():
+    """Entrées réelles : les moniteurs de sortie ne sont pas des micros.
+
+    pactl liste un `.monitor` par sink — les proposer comme entrée reviendrait
+    à offrir « enregistre ce que tu entends » au milieu des micros, ce qui n'est
+    jamais ce qu'on cherche ici et fait doubler la liste.
+    """
+    return [d for d in _list_devices("sources") if not d[0].endswith(".monitor")]
 
 
 def rec_state():
@@ -132,6 +151,7 @@ class SoundPopup(LayerPopup):
     IC_SINK = "\U000f04c3"     # périphérique de sortie
     IC_MIC = "\U000f036c"      # micro
     IC_MIC_OFF = "\U000f036d"  # micro barré
+    IC_SOURCE = "\U000f036c"   # périphérique d'entrée
     IC_LEVEL = ""              # le VU-mètre porte son propre libellé
     IC_FOLDER = "\U000f024b"   # dossier
     IC_FIX = "\U000f0709"      # rotation / réinitialisation
@@ -141,6 +161,8 @@ class SoundPopup(LayerPopup):
         super().__init__("Son", width=360, margin_right=70)
         self._timeouts = {}
         self.sink_rows = []
+        self.source_rows = []
+        self.switch_mic = None
         self._meter_peak = 0.0       # dernier pic écrit par le thread de capture
         self._meter_shown = 0.0      # valeur affichée (lissée)
         self._meter_stop = threading.Event()
@@ -170,8 +192,18 @@ class SoundPopup(LayerPopup):
             mic = self.add_card("Micro")
             self.scale_mic = self._make_scale(mvol, SOURCE)
             mic.control(self.IC_MIC, self.scale_mic)
-            mic.toggle(self.IC_MIC_OFF, "Micro coupé", mmuted,
-                       lambda sw, _p: self._set_mute(SOURCE, sw), green=True)
+            self.switch_mic = mic.toggle(
+                self.IC_MIC_OFF, "Micro coupé", mmuted,
+                lambda sw, _p: self._set_mute(SOURCE, sw), green=True)
+
+            # Symétrique de la sortie : une entrée unique ne mérite pas d'être
+            # listée, il n'y a rien à y choisir.
+            sources = list_sources()
+            for name, desc, is_def in (sources if len(sources) > 1 else []):
+                row = mic.action(
+                    self.IC_SOURCE, desc, selected=is_def,
+                    on_click=lambda _b, n=name: self._select_source(n))
+                self.source_rows.append((row, name))
 
             # VU-mètre : le niveau réel, à vérifier avant de lancer un
             # enregistrement. Empilé sous son propre libellé, il occupe la
@@ -278,6 +310,31 @@ class SoundPopup(LayerPopup):
             else:
                 ctx.remove_class("selected")
 
+    def _select_source(self, name):
+        subprocess.run(["pactl", "set-default-source", name],
+                       stdout=DEVNULL, stderr=DEVNULL)
+        # Déplacer les flux d'enregistrement en cours vers la nouvelle entrée,
+        # comme on le fait pour les flux de lecture à la sortie.
+        for line in run(["pactl", "list", "short", "source-outputs"]).splitlines():
+            idx = line.split("\t", 1)[0].strip()
+            if idx:
+                subprocess.run(["pactl", "move-source-output", idx, name],
+                               stdout=DEVNULL, stderr=DEVNULL)
+        for row, rname in self.source_rows:
+            ctx = row.get_style_context()
+            if rname == name:
+                ctx.add_class("selected")
+            else:
+                ctx.remove_class("selected")
+        # Le VU-mètre écoute la source par défaut telle qu'elle était au
+        # lancement de parec : sans relance, il continuerait d'afficher le
+        # niveau de l'entrée qu'on vient justement d'abandonner — et c'est
+        # pour vérifier le niveau du NOUVEAU micro qu'on change d'entrée.
+        self._restart_meter()
+        # Le curseur et la coupure visent @DEFAULT_AUDIO_SOURCE@, qui pointe
+        # désormais ailleurs : leur position doit suivre.
+        self._sync_mic_controls()
+
     def _open_pavucontrol(self, _btn):
         subprocess.Popen(["pavucontrol"], stdout=DEVNULL, stderr=DEVNULL)
         self.close()
@@ -348,6 +405,26 @@ class SoundPopup(LayerPopup):
             Gdk.Screen.get_default(), provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
 
+    def _restart_meter(self):
+        """Recommence la capture sur la source par défaut du moment."""
+        if getattr(self, "meter", None) is None:
+            return
+        self._stop_meter()
+        self._meter_stop.clear()
+        self._meter_peak = 0.0
+        self._meter_shown = 0.0
+        self._start_meter()
+        GLib.timeout_add(METER_FPS_MS, self._refresh_meter)
+
+    def _sync_mic_controls(self):
+        """Replace curseur et interrupteur sur l'entrée devenue par défaut."""
+        vol, muted = get_volume(SOURCE)
+        self.scale_mic.handler_block_by_func(self._on_volume_changed)
+        self.scale_mic.set_value(vol)
+        self.scale_mic.handler_unblock_by_func(self._on_volume_changed)
+        if self.switch_mic is not None:
+            self.switch_mic.set_active(muted)
+
     def _start_meter(self):
         try:
             self._meter_proc = subprocess.Popen(
@@ -397,8 +474,7 @@ class SoundPopup(LayerPopup):
 
 
 def main():
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-    SoundPopup().run()
+    run_popup(SoundPopup, "waybar-sound-menu")
 
 
 if __name__ == "__main__":

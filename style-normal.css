@@ -84,7 +84,6 @@ window#waybar {
    une fois pour toutes : elle définit la pilule qui apparaîtra au survol. */
 #workspaces,
 #window,
-#clock,
 #battery,
 #backlight,
 #mpris,
@@ -96,7 +95,9 @@ window#waybar {
 #system,
 #connect,
 #audio,
+#datetime,
 #custom-chrome,
+#custom-calendar,
 #custom-claude,
 #custom-dnd,
 #custom-power,
@@ -126,7 +127,8 @@ window#waybar {
 #custom-tray-handle,
 #custom-toggle-info,
 #custom-keybinds,
-#custom-dots {
+#custom-dots,
+#clock {
     background-color: transparent;
     color: @ink;
     padding: 0 7px;
@@ -140,7 +142,8 @@ window#waybar {
 #status,
 #system,
 #connect,
-#audio {
+#audio,
+#datetime {
     padding: 0 1px;
 }
 
@@ -174,7 +177,7 @@ window#waybar {
 }
 
 /* ═══ Survol : la pilule apparaît sous le curseur, et nulle part ailleurs ═══ */
-#clock:hover,
+#datetime:hover,
 #battery:hover,
 #backlight:hover,
 #mpris:hover,
@@ -202,7 +205,7 @@ window#waybar {
 /* ═══ Pression : le clic s'enfonce d'un cran ═══
    Les popups GTK mettent 100 à 300 ms à s'ouvrir. Sans cet état, le clic
    semble n'avoir rien déclenché. Même remplissage que la sélection. */
-#clock:active,
+#datetime:active,
 #battery:active,
 #backlight:active,
 #mpris:active,
@@ -268,18 +271,28 @@ window#waybar {
 }
 
 /* Les deux moitiés de l'horloge portent la MÊME action au clic : rien ne
-   justifie qu'elles se lisent comme deux zones. Les paddings intérieurs
-   tombent à 2px — l'écart d'encre passe de 23px à une dizaine, soit moins
-   que le pas de la rangée d'icônes — et « mar. 01 sept. 16:32 » redevient
-   une seule inscription. Les minimums, eux, restent : ils sont calés sur le
-   pire cas mesuré (81px pour « mar. 01 sept. »). */
+   justifie qu'elles se lisent comme deux zones. Elles vivent donc dans le
+   groupe `group/datetime`, qui porte à lui seul la marge, le rayon et la
+   pilule de survol — pointer la date allume désormais l'heure avec elle,
+   au lieu de découper l'inscription en deux boutons.
+
+   À l'intérieur, les paddings retombent à 2px : l'écart d'encre passe de
+   23px à une dizaine, soit moins que le pas de la rangée d'icônes, et
+   « mar. 01 sept. 16:32 » se lit d'un trait. Les minimums, eux, restent :
+   ils sont calés sur le pire cas mesuré (81px pour « mar. 01 sept. »). */
 #clock.date {
     min-width: 84px;
     padding-right: 2px;
 }
 
+/* L'heure n'a pas de minimum, et c'est ce qui colle les deux moitiés : sa
+   largeur ne bouge jamais (chiffres tabulaires, quatre caractères), et rien
+   ne se décale derrière elle — `custom/power` est ancré au bord, la zone est
+   alignée à droite. Les 47px qu'elle réservait ne stabilisaient donc rien ;
+   ils ouvraient onze pixels de vide entre « sept. » et « 18:44 », soit
+   davantage que l'espace d'un mot. Le minimum de la DATE, lui, reste : c'est
+   lui qui empêche toute la rangée d'icônes de danser d'un jour à l'autre. */
 #clock.time {
-    min-width: 47px;
     padding-left: 2px;
 }
 
@@ -379,6 +392,7 @@ window#waybar {
    la zone se lisait comme une file de chiffres. 10px triple l'écart entre les
    modules sans toucher à celui qui tient chaque paire ensemble, et la zone
    reste malgré tout plus dense que la rangée d'icônes — c'est un paquet. */
+#custom-calendar,
 #custom-claude,
 #custom-dnd,
 #custom-updates,
@@ -488,6 +502,34 @@ window#waybar {
 
 #custom-updates.many {
     color: @ink;
+}
+
+/* ── Agenda : une horloge, pas une alarme ──
+      Le module n'existe dans la barre qu'à moins de deux heures du prochain
+      rendez-vous ; sa seule présence est déjà le premier signal. Restait à
+      graduer ce qui suit, sans que l'agenda crie plus fort que la batterie à
+      3 % : l'encre remonte d'un cran à trente minutes, la couleur n'arrive
+      qu'aux cinq dernières — c'est-à-dire au moment où il faut se lever. ── */
+#custom-calendar {
+    color: @ink2;
+}
+
+#custom-calendar.soon {
+    color: @ink;
+}
+
+#custom-calendar.imminent {
+    color: @sysOrange;
+    font-weight: 600;
+    animation: blink 1.4s ease-in-out infinite;
+}
+
+/* En cours : le rendez-vous a commencé, il n'y a plus rien à anticiper. Le
+   bleu système dit « ceci a lieu maintenant » là où l'orange disait
+   « dépêche-toi » ; et le clignotement s'arrête, sans quoi la barre
+   s'agiterait pendant toute la réunion. */
+#custom-calendar.now {
+    color: @sysBlue;
 }
 
 /* ── Réseau / Bluetooth : déconnecté = éteint, pas rouge ── */

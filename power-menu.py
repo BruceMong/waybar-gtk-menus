@@ -11,15 +11,9 @@ aplat rouge pleine largeur pour dire « attention », la carte du bas suffit à
 séparer les deux mondes et le libellé rouge confirme.
 """
 import os
-import signal
 import subprocess
 
-import gi
-
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
-
-from menu_common import LayerPopup  # noqa: E402
+from menu_common import LayerPopup, run_popup  # noqa: E402
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 REMOTE_SH = os.path.join(CONFIG_DIR, "remote-mode.sh")
@@ -64,8 +58,7 @@ class PowerPopup(LayerPopup):
 
 
 def main():
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-    PowerPopup().run()
+    run_popup(PowerPopup, "waybar-power-menu")
 
 
 if __name__ == "__main__":

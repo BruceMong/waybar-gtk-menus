@@ -2,7 +2,8 @@
 
 A Waybar setup for Hyprland where every module opens a **native GTK popup**
 instead of shelling out to `rofi`/`wofi` menus — Wi-Fi picker, volume mixer,
-brightness, battery, notifications, systemd units, keybindings, power.
+brightness, battery, Bluetooth, notifications, systemd units, keybindings,
+power.
 
 Plus a few things Waybar can't do on its own:
 
@@ -170,7 +171,13 @@ exposes (`k10temp`, `coretemp`, …), and dropped if none matches.
 
 `keybinds-menu.py` lists your Hyprland binds and lets you **reassign one by
 capturing a new combo**. It rewrites the matching line in your own
-`~/.config/hypr/hyprland.conf` (or `plugins.conf`), then reloads Hyprland.
+`~/.config/hypr/hyprland.lua`, then reloads Hyprland.
+
+If you keep a `hyprland.conf` alongside the Lua config as a fallback — the
+hyprlang format is deprecated since 0.55 and goes away in 0.57 — the matching
+`bind = …` line is rewritten there too, so the fallback cannot silently drift
+out of date. When no line matches, the menu says so instead of staying quiet:
+that one is yours to port by hand.
 
 Before writing it saves two backups next to the file:
 
@@ -210,13 +217,107 @@ Then register them in `~/.claude/settings.json`:
 
 Don't want it? Remove `custom/claude` from `modules-right` in `config-full`.
 
+## Google Calendar module (optional)
+
+`custom/calendar` shows the next meeting — and nothing at all the rest of the
+time. The module stays empty (and Waybar hides it) until a timed event is less
+than two hours away, then counts down: `1 h 05`, then `12 min · Sprint review`
+once the title becomes worth reading, then orange and blinking in the last five
+minutes, then blue while the meeting runs. Click opens a popup with the next
+few days, click-through joins the Meet link; right click opens Google Calendar.
+The clock opens the same popup — it carries the current time, today's date and
+ISO week, the next few days, a 24-hour / AM-PM switch, and a card of actions
+(new event, open Google Calendar, copy today's date, refresh); the browser
+stays one click away instead of being the only thing a click can do.
+
+The clock itself is one block: `clock#date` and `clock#time` live in
+`group/datetime`, so hovering either half lights the whole inscription instead
+of splitting it into two buttons — while `generate-config.py` can still fold
+the date away on its own when the bar runs out of room. Picking **AM / PM** in
+the popup drops a `clock-12h` flag next to the config; `generate-config.py`
+reads it and switches that module to `%I:%M %p` **and** to `en_US.UTF-8`,
+since `%p` renders nothing under a French locale. Its hover calendar turns
+English with it — the date half stays local.
+Reminders fire at T-10 and T-2 through `notify-send`, with a **Join** button
+when the event has a video link.
+
+Reading the calendar needs your own OAuth client — Google does not let a
+desktop app ship shared credentials:
+
+1. [console.cloud.google.com](https://console.cloud.google.com) → create a
+   project (any name).
+2. *APIs & Services* → *Library* → enable **Google Calendar API**.
+3. *OAuth consent screen* → **External**, fill the required fields, then add
+   your own address under *Test users* (no verification needed for personal
+   use).
+4. *Credentials* → *Create credentials* → **OAuth client ID** → *Desktop app*.
+5. Download the JSON and drop it in place, then authorize:
+
+```bash
+mkdir -p ~/.config/waybar-calendar
+cp ~/Downloads/client_secret_*.json ~/.config/waybar-calendar/client_secret.json
+sudo pacman -S python-google-api-python-client python-google-auth-oauthlib
+~/.config/waybar/calendar_agenda.py --auth      # opens the browser once
+```
+
+6. Run it on a timer — one tick a minute, one API call every five. The tick
+   is what makes a T-10 reminder possible at all; the bar itself never waits
+   on the network.
+
+```bash
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/waybar-calendar.service <<'EOF'
+[Unit]
+Description=Google Calendar sync and reminders for Waybar
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.config/waybar/calendar_agenda.py --tick
+SuccessExitStatus=0 1 2
+EOF
+
+cat > ~/.config/systemd/user/waybar-calendar.timer <<'EOF'
+[Unit]
+Description=Google Calendar every minute
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=1min
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl --user daemon-reload
+systemctl --user enable --now waybar-calendar.timer
+```
+
+Credentials and token live in `~/.config/waybar-calendar/`, **outside this
+repo** on purpose. `settings.json` in the same folder overrides any of the
+defaults declared at the top of `calendar_agenda.py`:
+
+```json
+{
+  "horizon_min": 120,
+  "title_from_min": 15,
+  "reminders": [10, 2],
+  "calendars": ["you@example.com"]
+}
+```
+
+Don't want it? Remove `custom/calendar` from `group/status` in `config-full`.
+
 ## Layout
 
 | File | Role |
 |------|------|
 | `menu_common.py` | shared GTK layer-shell popup base — all menus build on it |
+| `modules_registry.py` | single inventory of the bar's modules, shared by the eye menu and the `⋮` menu |
 | `generate-config.py` | `config-full` → `config-active` |
 | `autofit.py` | folds modules away when the bar overflows |
+| `calendar_agenda.py` | Google Calendar: OAuth, sync, reminders, module JSON |
 | `*-menu.py` | one popup per module |
 | `*.sh` | small stateless helpers (toggles, watchers, status JSON) |
 

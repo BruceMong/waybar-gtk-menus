@@ -41,7 +41,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, GLib, Pango  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from menu_common import Card, LayerPopup, section_label  # noqa: E402
+from menu_common import Card, LayerPopup, run_popup  # noqa: E402
 from claude_sessions_data import (  # noqa: E402
     human_tokens, humanize, load_sessions, short_model,
 )
@@ -884,7 +884,8 @@ class ClaudeMenu(LayerPopup):
 
 
 def main():
-    ClaudeMenu(load_sessions(enrich=True)).run()
+    run_popup(lambda: ClaudeMenu(load_sessions(enrich=True)),
+              "waybar-claude-menu")
 
 
 if __name__ == "__main__":
