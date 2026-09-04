@@ -38,7 +38,7 @@ if [ -n "$addr" ]; then
             -A "default=Aller à la fenêtre" \
             "Claude Code — $CNF_DIR" "$CNF_MSG")
         if [ "$action" = "default" ]; then
-            hyprctl dispatch focuswindow "address:$CNF_ADDR"
+            hyprctl dispatch "hl.dsp.focus({ window = \"address:$CNF_ADDR\" })"
         fi
     ' >/dev/null 2>&1
 else

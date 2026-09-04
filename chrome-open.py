@@ -54,8 +54,27 @@ TIMEOUT = 8.0
 POLL = 0.15
 
 
+def _lua_dispatch(args):
+    """Traduit un dispatcher hyprlang en expression Lua.
+
+    Depuis la bascule de la config sur hyprland.lua, `hyprctl dispatch` evalue
+    son argument comme du code Lua et l'enveloppe dans hl.dispatch(...). La
+    forme historique `dispatch focuswindow address:0x..` produisait
+    « ')' expected near 'address' » et ne faisait rien du tout.
+    """
+    cmd = args[0]
+    arg = args[1] if len(args) > 1 else ""
+    if cmd == "focuswindow":
+        return 'hl.dsp.focus({ window = "%s" })' % arg
+    if cmd == "workspace":
+        return 'hl.dsp.focus({ workspace = "%s" })' % arg
+    if cmd == "lockactivegroup":
+        return 'hl.dsp.group.lock("%s")' % arg
+    raise ValueError("dispatcher non traduit: %r" % (args,))
+
+
 def dispatch(*args):
-    subprocess.run(["hyprctl", "dispatch", *args],
+    subprocess.run(["hyprctl", "dispatch", _lua_dispatch(args)],
                    check=False, stdout=DEVNULL, stderr=DEVNULL)
 
 

@@ -202,7 +202,24 @@ def run_detached(argv):
 
 
 def hypr(*args):
-    subprocess.run(["hyprctl", "dispatch", *args], capture_output=True)
+    """Dispatch Hyprland, en syntaxe Lua.
+
+    hyprland.lua etant la config active, `hyprctl dispatch` evalue son argument
+    comme du code Lua (enveloppe dans hl.dispatch(...)). Les formes hyprlang
+    `focuswindow address:0x..` / `movetoworkspacesilent 3,address:0x..` ne
+    parsent plus et echouaient silencieusement.
+    """
+    cmd = args[0]
+    arg = args[1] if len(args) > 1 else ""
+    if cmd == "focuswindow":
+        lua = 'hl.dsp.focus({ window = "%s" })' % arg
+    elif cmd == "movetoworkspacesilent":
+        ws, _, win = arg.partition(",")
+        lua = ('hl.dsp.window.move({ workspace = "%s", window = "%s", '
+               'silent = true })' % (ws, win))
+    else:
+        raise ValueError("dispatcher non traduit: %r" % (args,))
+    subprocess.run(["hyprctl", "dispatch", lua], capture_output=True)
 
 
 def state_phrase(status, age_seconds):
@@ -851,7 +868,9 @@ class ClaudeMenu(LayerPopup):
             return
         env = dict(os.environ, CS_REPLY=text, CS_ADDR=addr)
         script = (
-            'hyprctl dispatch focuswindow "address:$CS_ADDR" >/dev/null; '
+            # Syntaxe Lua : cf. hypr() plus haut, la forme hyprlang ne parse plus.
+            'hyprctl dispatch '
+            '"hl.dsp.focus({ window = \\"address:$CS_ADDR\\" })" >/dev/null; '
             'for i in $(seq 40); do '
             '  cur=$(hyprctl activewindow -j | jq -r ".address // empty"); '
             '  [ "$cur" = "$CS_ADDR" ] && break; '

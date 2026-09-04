@@ -98,7 +98,7 @@ fi
 # Mémorise la fenêtre actuellement au premier plan pour y revenir ensuite.
 prev=$(hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty')
 
-hyprctl dispatch focuswindow "address:$target" >/dev/null 2>&1 || exit 0
+hyprctl dispatch "hl.dsp.focus({ window = \"address:$target\" })" >/dev/null 2>&1 || exit 0
 sleep "$FOCUS_DELAY"
 
 # Raccourci de l'extension PiP (Alt+P).
@@ -107,5 +107,5 @@ wtype -M alt -k p -m alt
 # Revient à la fenêtre d'origine si ce n'était pas celle-là (PiP reste flottant).
 if [ -n "$prev" ] && [ "$prev" != "$target" ]; then
     sleep 0.05
-    hyprctl dispatch focuswindow "address:$prev" >/dev/null 2>&1
+    hyprctl dispatch "hl.dsp.focus({ window = \"address:$prev\" })" >/dev/null 2>&1
 fi
