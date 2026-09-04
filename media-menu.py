@@ -9,11 +9,23 @@ deux défauts : rien dans la barre n'annonçait qu'il existait — pas plus que 
 molette ou le clic du milieu — et il mettait en pause la cible qu'on venait de
 viser, si bien que le geste suivant se faisait à l'aveugle.
 
-Le lecteur commandé est celui que le popup affiche : on cherche le premier qui
-joue, à défaut le premier en pause, et toutes les actions partent vers lui
-nommément. Passer par `playerctld` aurait fait suivre « le dernier lecteur
-actif », c'est-à-dire potentiellement un autre que celui dont on lit le titre.
+Deux particularités, toutes deux dues aux navigateurs :
+
+  - Chrome publie bien titre et artiste sur MPRIS, mais seulement une fois sa
+    session média établie : tant qu'elle ne l'est pas, sa propriété Metadata
+    se réduit à `mpris:length` (constaté sur le bus). Le titre de la fenêtre
+    Hyprland sert alors de secours — jamais de source principale, car il donne
+    l'onglet ACTIF, qui n'est pas forcément celui qui joue.
+
+  - lancer une vidéo depuis un menu la laisse jouer dans un onglet qu'on ne
+    regarde pas. Une mise en lecture depuis ce popup enchaîne donc sur le
+    Picture-in-Picture, sauf s'il y a déjà une fenêtre PiP à l'écran.
+    mpris-pip.sh dit lui-même quand il ne peut pas aboutir — le raccourci de
+    l'extension n'atteint que l'onglet au premier plan de sa fenêtre.
 """
+import json
+import os
+import re
 import subprocess
 
 import gi
@@ -24,11 +36,43 @@ from gi.repository import Gtk, GLib  # noqa: E402
 from menu_common import LayerPopup, run_popup  # noqa: E402
 
 DEVNULL = subprocess.DEVNULL
+CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
+PIP_SCRIPT = os.path.join(CONFIG_DIR, "mpris-pip.sh")
 
 # Rythme de rafraîchissement. Le popup ne montre ni progression ni pochette :
 # il n'a à suivre qu'un changement de piste ou de statut, y compris ceux
 # déclenchés depuis Spotify lui-même pendant que le menu est ouvert.
 REFRESH_MS = 1000
+
+# Lecteurs dont le média vit dans un onglet : ce sont eux qui gagnent à passer
+# en PiP, et eux dont le titre doit être cherché sur la fenêtre.
+BROWSERS = ("chromium", "chrome", "firefox", "brave", "vivaldi")
+
+# Classe Hyprland des fenêtres où chercher un titre de vidéo. La même que
+# celle visée par mpris-pip.sh : le PWA « chrome-notes… » porte sa propre
+# classe et n'est pas un lecteur.
+BROWSER_CLASSES = ("google-chrome", "chromium", "firefox")
+
+# Fenêtre Picture-in-Picture, Chrome comme Firefox. Même motif que la règle
+# `pip-float` de hyprland.lua — les deux désignent la même fenêtre, elles
+# doivent le dire de la même façon.
+PIP_TITLE = re.compile(r"picture.in.picture", re.I)
+
+# Suffixe que le navigateur colle au titre de la fenêtre, et compteur d'onglet
+# que Gmail ou YouTube posent devant.
+BROWSER_SUFFIX = re.compile(r"\s*[-–]\s*(Google Chrome|Chromium|Mozilla Firefox)\s*$")
+TAB_COUNTER = re.compile(r"^\(\d+\)\s*")
+SITE_SUFFIX = re.compile(r"\s*[-–]\s*(YouTube|Vimeo|Twitch|Dailymotion|SoundCloud)\s*$", re.I)
+
+# Marques de direction que YouTube enrobe autour des noms de chaîne. Invisibles
+# à l'écran, mais elles comptent dans la longueur du libellé et ressortent dès
+# qu'on tronque ou qu'on journalise le titre.
+BIDI_MARKS = re.compile("[‎‏‪-‮⁦-⁩]")
+
+# Nom lisible du lecteur : `playerctl -l` rend des identifiants d'instance
+# (« chromium.instance1107 »), pas des noms d'application.
+PLAYER_LABELS = {"chromium": "Chrome", "chrome": "Chrome",
+                 "spotify": "Spotify", "firefox": "Firefox"}
 
 
 def run(cmd):
@@ -38,36 +82,100 @@ def run(cmd):
         return ""
 
 
-def active_player():
-    """Nom et statut du lecteur à commander, ou (None, None) s'il n'y en a pas.
+def players():
+    """[(nom, statut)] pour chaque lecteur MPRIS, dans l'ordre de playerctl.
 
     `playerctl -l` et `playerctl -a status` rendent leurs lignes dans le même
-    ordre : les apparier donne le statut de chaque lecteur sans un appel par
-    lecteur. Celui qui joue l'emporte sur celui qui est en pause — c'est le
-    même arbitrage que fait la barre.
+    ordre : les apparier donne le statut de chacun sans un appel par lecteur.
     """
-    names = run(["playerctl", "-l"]).split()
-    stats = run(["playerctl", "-a", "status"]).split()
-    pairs = list(zip(names, stats))
+    return list(zip(run(["playerctl", "-l"]).split(),
+                    run(["playerctl", "-a", "status"]).split()))
+
+
+def auto_player(found):
+    """Le lecteur à commander par défaut : celui qui joue l'emporte.
+
+    C'est le même arbitrage que fait la barre. Sans lui, mettre Spotify en
+    lecture pendant qu'un onglet Chrome dort en pause donnerait la main au
+    mauvais des deux.
+    """
     for want in ("Playing", "Paused"):
-        for name, status in pairs:
+        for name, status in found:
             if status == want:
-                return name, status
-    return (pairs[0] if pairs else (None, None))
+                return name
+    return found[0][0] if found else None
 
 
-def metadata(player):
-    """(titre, artiste) du lecteur, chaînes vides si l'information manque."""
+def base_name(player):
+    """« chromium.instance1107 » -> « chromium »."""
+    return (player or "").split(".")[0].lower()
+
+
+def is_browser(player):
+    return base_name(player) in BROWSERS
+
+
+def clients():
+    try:
+        return json.loads(run(["hyprctl", "clients", "-j"]) or "[]")
+    except ValueError:
+        return []
+
+
+def pip_open():
+    """Une fenêtre Picture-in-Picture est-elle déjà posée sur l'écran ?
+
+    mpris-pip.sh est une bascule : l'appeler alors que le PiP est ouvert le
+    referme. Une lecture lancée depuis le menu ne doit donc l'appeler que
+    lorsqu'il n'y a rien à l'écran.
+    """
+    return any(PIP_TITLE.search(c.get("title") or "") for c in clients())
+
+
+def browser_now():
+    """(titre, site) de la vidéo du navigateur, lus sur la fenêtre Hyprland.
+
+    Secours pour le seul cas où Chrome n'a pas encore publié ses métadonnées.
+    Le titre de fenêtre est celui de l'onglet ACTIF : il ne dit donc pas ce qui
+    joue, il dit ce qu'on regarde — les deux coïncident souvent, pas toujours.
+    C'est pourquoi now_playing ne s'en sert qu'à défaut de titre MPRIS. On
+    préfère la fenêtre dont le titre nomme un site de vidéo, sinon la dernière
+    que le focus a visitée (`focusHistoryID` croît avec l'ancienneté).
+    """
+    windows = [c for c in clients()
+               if (c.get("class") or "").lower() in BROWSER_CLASSES]
+    if not windows:
+        return "", ""
+    named = [c for c in windows if SITE_SUFFIX.search(
+        BROWSER_SUFFIX.sub("", c.get("title") or ""))]
+    pool = named or windows
+    win = min(pool, key=lambda c: c.get("focusHistoryID", 1 << 30))
+
+    title = BIDI_MARKS.sub("", win.get("title") or "")
+    title = TAB_COUNTER.sub("", BROWSER_SUFFIX.sub("", title))
+    site = ""
+    m = SITE_SUFFIX.search(title)
+    if m:
+        site = m.group(1)
+        title = SITE_SUFFIX.sub("", title)
+    return title.strip(), site
+
+
+def now_playing(player):
+    """(titre, sous-titre) du lecteur, chaînes vides si rien n'est lisible."""
     if not player:
         return "", ""
     out = run(["playerctl", "-p", player, "metadata", "--format",
                "{{title}}\n{{artist}}"]).split("\n")
     out += ["", ""]
-    return out[0].strip(), out[1].strip()
+    title, artist = out[0].strip(), out[1].strip()
+    if not title and is_browser(player):
+        title, artist = browser_now()
+    return title, artist
 
 
 class MediaPopup(LayerPopup):
-    """Une seule carte : le morceau, puis la rangée de transport.
+    """Une carte pour le morceau et son transport, une autre pour les lecteurs.
 
     Les trois boutons vivent sur une ligne à part plutôt qu'en accessoires de
     la ligne du titre : ils commandent le morceau, ils ne le décrivent pas, et
@@ -99,12 +207,16 @@ class MediaPopup(LayerPopup):
     def __init__(self):
         super().__init__("Média", width=320, margin_right=self.MARGIN_RIGHT)
 
-        self.player, status = active_player()
-        title, artist = metadata(self.player)
+        found = players()
+        # Lecteur choisi à la main dans la carte du bas. Tant qu'il vit, il
+        # l'emporte sur l'arbitrage automatique : sans cela, désigner l'onglet
+        # Chrome pendant que Spotify joue serait défait au tick suivant.
+        self._pinned = None
+        self.player = auto_player(found)
+        self._status = dict(found).get(self.player)
 
         card = self.add_card()
-        self.now = card.info(self._player_icon(), title or "Aucune lecture",
-                             subtitle=artist or None)
+        self.now = card.info(self._player_icon(), "Aucune lecture")
 
         self.btn_prev = self._transport(self.IC_PREV, "previous",
                                         "Piste précédente")
@@ -117,7 +229,23 @@ class MediaPopup(LayerPopup):
             row.pack_start(btn, True, True, 0)
         card.custom(row)
 
-        self._apply(status, title, artist)
+        # La liste des lecteurs n'a de sens qu'à partir de deux : avec un seul,
+        # elle n'offrirait aucun choix. Elle est construite une fois pour
+        # toutes — un lecteur ne s'ouvre ni ne se ferme dans les quelques
+        # secondes où le popup est à l'écran, et seule la coche se rafraîchit.
+        self.player_rows = []
+        if len(found) > 1:
+            picker = self.add_card("Lecteurs")
+            for name, _status in found:
+                key = base_name(name)
+                label = PLAYER_LABELS.get(key, key.capitalize() or name)
+                row = picker.action(
+                    self.PLAYER_ICONS.get(key, self.IC_DEFAULT), label,
+                    selected=(name == self.player),
+                    on_click=lambda _b, n=name: self._pick(n))
+                self.player_rows.append((row, name))
+
+        self._apply()
         self._tick = GLib.timeout_add(REFRESH_MS, self._refresh)
         self.connect("destroy", self._stop_refresh)
 
@@ -126,31 +254,47 @@ class MediaPopup(LayerPopup):
     def _transport(self, glyph, command, tooltip, accent=False):
         btn = Gtk.Button(label=glyph)
         btn.set_tooltip_text(tooltip)
-        ctx = btn.get_style_context()
         if accent:
-            ctx.add_class("accent")
+            btn.get_style_context().add_class("accent")
         btn.connect("clicked", lambda _b, c=command: self._send(c))
         return btn
 
     def _player_icon(self):
         if not self.player:
             return self.IC_NONE
-        key = self.player.split(".")[0].lower()
-        return self.PLAYER_ICONS.get(key, self.IC_DEFAULT)
+        return self.PLAYER_ICONS.get(base_name(self.player), self.IC_DEFAULT)
 
     # ---- Actions ----
+
+    def _pick(self, name):
+        self._pinned = name
+        self.player = name
+        self._refresh()
 
     def _send(self, command):
         """Envoie une commande au lecteur, sans refermer le popup.
 
         Enchaîner deux pistes est un geste courant : refermer à chaque clic,
         comme le font les menus qui lancent une application, obligerait à
-        rouvrir le menu entre chaque.
+        rouvrir le menu entre chaque. Seule la mise en PiP fait exception —
+        elle déplace le regard vers la vidéo, le menu n'a plus rien à y faire.
         """
         if not self.player:
             return
+        starting = command == "play-pause" and self._status != "Playing"
         subprocess.run(["playerctl", "-p", self.player, command],
                        stdout=DEVNULL, stderr=DEVNULL)
+
+        if starting and is_browser(self.player) and not pip_open():
+            # --playing : viser la vidéo que MPRIS annonce, pas celle qu'on a
+            # sous les yeux — les deux diffèrent dès qu'on a changé d'onglet.
+            # mpris-pip.sh donne le focus au navigateur pour lui envoyer le
+            # raccourci de l'extension : le popup le perdrait de toute façon.
+            subprocess.Popen([PIP_SCRIPT, "--playing"],
+                             stdout=DEVNULL, stderr=DEVNULL)
+            self.close()
+            return
+
         # Spotify met un instant à publier le nouveau titre sur D-Bus ; le
         # tick périodique rattrape ce que cette relecture immédiate manque.
         GLib.timeout_add(250, self._refresh_once)
@@ -162,32 +306,45 @@ class MediaPopup(LayerPopup):
         return False
 
     def _refresh(self):
-        player, status = active_player()
+        found = players()
+        names = [n for n, _ in found]
+        if self._pinned and self._pinned not in names:
+            self._pinned = None          # le lecteur épinglé s'est fermé
+        player = self._pinned or auto_player(found)
+
         if player != self.player:
             self.player = player
             if self.now.icon_label is not None:
                 self.now.icon_label.set_text(self._player_icon())
-        title, artist = metadata(player)
-        self._apply(status, title, artist)
+        self._status = dict(found).get(player)
+        self._apply()
         return True
 
-    def _apply(self, status, title, artist):
+    def _apply(self):
         """Reflète l'état courant sur les widgets déjà construits.
 
         Mettre à jour les labels plutôt que reconstruire la carte : une
         reconstruction toutes les secondes ferait perdre le focus clavier et
         clignoter la fenêtre.
         """
-        playing = status == "Playing"
+        title, subtitle = now_playing(self.player)
         self.now.title_label.set_text(title or "Aucune lecture")
 
         sub = self.now.subtitle_label
-        sub.set_text(artist)
-        sub.set_visible(bool(artist))
+        sub.set_text(subtitle)
+        sub.set_visible(bool(subtitle))
 
+        playing = self._status == "Playing"
         self.btn_toggle.set_label(self.IC_PAUSE if playing else self.IC_PLAY)
         for btn in (self.btn_prev, self.btn_toggle, self.btn_next):
             btn.set_sensitive(bool(self.player))
+
+        for row, name in self.player_rows:
+            ctx = row.get_style_context()
+            if name == self.player:
+                ctx.add_class("selected")
+            else:
+                ctx.remove_class("selected")
 
     def _stop_refresh(self, *_):
         if self._tick:

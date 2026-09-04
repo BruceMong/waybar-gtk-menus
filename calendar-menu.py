@@ -172,7 +172,8 @@ class CalendarPopup(LayerPopup):
             if ev["open"]:
                 card.action(icon, ev["summary"], subtitle=ev["subtitle"],
                             value=ev["when"], chevron=True,
-                            on_click=self._opener(ev["open"]))
+                            on_click=self._opener(ev["open"],
+                                                  ev.get("calendar")))
             else:
                 # Une ligne d'action sans destination se présenterait comme
                 # cliquable et ne ferait rien : un événement sans lien est un
@@ -223,6 +224,10 @@ class CalendarPopup(LayerPopup):
                 "day": day, "when": when, "summary": ev["summary"],
                 "subtitle": subtitle, "meet": ev.get("meet"),
                 "open": ev.get("meet") or ev.get("link"),
+                # L'identifiant de l'agenda est l'adresse mail de son
+                # propriétaire : c'est elle qui dit dans quel profil Chrome le
+                # lien s'ouvrira vraiment.
+                "calendar": ev.get("calendar"),
                 "sort": (day, start.time() if not ev["all_day"] else
                          datetime.min.time()),
             })
@@ -263,13 +268,21 @@ class CalendarPopup(LayerPopup):
 
     # ---- Actions ----
 
-    def _opener(self, url):
+    def _opener(self, url, calendar=None):
+        """Ouvre la visio ou l'événement, dans le profil Chrome qui y a accès.
+
+        Les agendas pro sont partagés vers le compte perso : ils s'affichent
+        donc ici, mais leurs événements ne s'ouvrent que depuis le profil du
+        compte propriétaire. `calendar_agenda.open_command` fait la traduction
+        et retombe sur un lancement nu quand aucun profil ne correspond.
+        """
         if not url:
             return None
 
         def handler(_btn):
-            subprocess.Popen(["setsid", "-f", "google-chrome-stable", url],
-                             stdout=DEVNULL, stderr=DEVNULL)
+            subprocess.Popen(ca.open_command(url, calendar),
+                             stdout=DEVNULL, stderr=DEVNULL,
+                             start_new_session=True)
             self.close()
         return handler
 

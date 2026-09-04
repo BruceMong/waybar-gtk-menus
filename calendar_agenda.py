@@ -28,6 +28,7 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
 # ── Emplacements ──────────────────────────────────────────────────────────
 # Configuration et secrets : hors du dépôt (cf. docstring).
@@ -53,6 +54,14 @@ RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
 NOTIFIED_DIR = os.path.join(RUNTIME_DIR, "waybar-calendar-notified")
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CHROME_OPEN = os.path.join(SCRIPT_DIR, "chrome-open.py")
+
+# Profils Chrome : « Local State » porte, pour chaque dossier de profil, le
+# compte Google auquel il est connecté. C'est la seule table qui relie un
+# agenda à la fenêtre capable de l'ouvrir.
+CHROME_STATE = os.path.join(
+    os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")),
+    "google-chrome", "Local State")
 
 # ── Réglages par défaut (surchargeables par settings.json) ─────────────────
 DEFAULTS = {
@@ -79,6 +88,14 @@ DEFAULTS = {
     # Agendas à suivre, par identifiant exact. Vide = tous ceux que Google
     # marque comme sélectionnés, moins skip_calendars.
     "calendars": [],
+    # Agenda → dossier de profil Chrome, pour les cas que « Local State » ne
+    # permet pas de deviner : un profil dans lequel on ne s'est jamais
+    # connecté à Google n'y déclare aucun compte. Format :
+    # {"moi@exemple.fr": "Profile 6"}.
+    "chrome_profiles": {},
+    # Bureau Hyprland où poser la fenêtre ouverte. 0 = la laisser où elle
+    # arrive. Sinon elle rejoint le groupe de fenêtres Chrome qui s'y trouve.
+    "chrome_workspace": 2,
 }
 
 # Noms de jours et de mois écrits ici plutôt que via strftime : le module
@@ -104,6 +121,73 @@ def settings():
     except (OSError, ValueError):
         pass
     return conf
+
+
+# ── Ouverture dans le bon profil Chrome ───────────────────────────────────
+# Les agendas professionnels sont partagés vers le compte personnel : ils
+# s'affichent donc tous dans le popup, mais leurs événements ne s'ouvrent que
+# depuis le profil du compte propriétaire — ailleurs, Google répond « vous
+# n'avez pas accès à cet événement ». L'identifiant d'un agenda Google *est*
+# une adresse mail, et c'est elle qui désigne le profil.
+
+def chrome_profile_table():
+    """Table compte Google → dossier de profil, lue dans « Local State »."""
+    try:
+        with open(CHROME_STATE, encoding="utf-8") as f:
+            cache = json.load(f)["profile"]["info_cache"]
+    except (OSError, ValueError, KeyError):
+        return {}
+    table = {}
+    # Deux profils peuvent porter le même compte — un « Your Chrome » créé par
+    # accident et jamais utilisé traîne volontiers à côté du vrai. Default
+    # passe donc en premier, et le premier inscrit gagne.
+    for directory in sorted(cache, key=lambda d: (d != "Default", d)):
+        email = (cache[directory].get("user_name") or "").strip().lower()
+        if email:
+            table.setdefault(email, directory)
+    return table
+
+
+def chrome_profile(calendar, conf=None):
+    """Dossier de profil capable d'ouvrir cet agenda, None si on ne sait pas."""
+    email = (calendar or "").strip().lower()
+    if not email:
+        return None
+    conf = settings() if conf is None else conf
+    override = {str(k).strip().lower(): v
+                for k, v in (conf.get("chrome_profiles") or {}).items()}
+    if email in override:
+        return override[email]
+    return chrome_profile_table().get(email)
+
+
+def with_authuser(url, calendar):
+    """Épingle le compte Google du lien.
+
+    Un profil peut porter plusieurs comptes ; sans ce paramètre Google ouvre
+    le lien avec le premier de la liste, qui n'est pas forcément celui qui
+    possède l'agenda. Le profil décide de la session, `authuser` décide du
+    compte à l'intérieur de cette session.
+    """
+    email = (calendar or "").strip()
+    if not url or not email or "google.com" not in url:
+        return url
+    sep = "&" if "?" in url else "?"
+    return "%s%sauthuser=%s" % (url, sep, quote(email))
+
+
+def open_command(url, calendar=None, conf=None):
+    """La commande qui ouvre `url` là où il s'ouvre vraiment.
+
+    Sans profil identifié on retombe sur le lancement nu : mieux vaut une
+    fenêtre dans le mauvais compte qu'un clic qui ne fait rien.
+    """
+    conf = settings() if conf is None else conf
+    profile = chrome_profile(calendar, conf)
+    if not profile:
+        return ["setsid", "-f", "google-chrome-stable", url]
+    return [CHROME_OPEN, profile, with_authuser(url, calendar),
+            str(conf.get("chrome_workspace", DEFAULTS["chrome_workspace"]))]
 
 
 # ── Cache ─────────────────────────────────────────────────────────────────
@@ -464,8 +548,15 @@ def notify(event, threshold):
         # tel quel il figerait le tick pendant toute la durée d'affichage. On
         # le détache donc, avec un shell qui ouvre le lien si le bouton est
         # pressé (notify-send imprime alors la clé de l'action).
-        script = ('out=$("$@"); [ "$out" = join ] && '
-                  'exec setsid -f google-chrome-stable %s' % shquote(link))
+        #
+        # Même chemin d'ouverture que le popup : rejoindre une visio depuis le
+        # mauvais profil Google demande de rebasculer de compte, ce qui est
+        # exactement ce qu'on n'a pas le temps de faire à deux minutes.
+        cmd = open_command(link, event.get("calendar"))
+        if cmd[0] != "setsid":
+            cmd = ["setsid", "-f"] + cmd
+        script = ('out=$("$@"); [ "$out" = join ] && exec %s'
+                  % " ".join(shquote(a) for a in cmd))
         args = ["bash", "-c", script, "bash"] + args
     subprocess.Popen(args, start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

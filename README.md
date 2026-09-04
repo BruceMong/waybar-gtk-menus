@@ -125,7 +125,7 @@ surfaces, so the cost is limited to the bar and the popups.
 | brightness | `brightnessctl`, `hyprsunset` (night light), `hypridle` |
 | notifications / dnd | `swaync` |
 | updates | `checkupdates` (pacman-contrib), `yay` for AUR counts |
-| media | `playerctl`, Waybar's `mpris` module — title while playing, greyed while paused, nothing when stopped. Left click opens `media-menu.py` (track, prev / play-pause / next); scroll skips tracks, middle click goes back, right click toggles Chrome PiP |
+| media | `playerctl`, Waybar's `mpris` module — title while playing, greyed while paused, nothing when stopped. Left click opens `media-menu.py` (track, prev / play-pause / next, plus a player picker when several are running); scroll skips tracks, middle click goes back, right click toggles Chrome PiP (`wtype`, `jq`, and the Google PiP extension bound to Alt+P) |
 | systemd | `systemctl --user` / system units |
 | keybindings | Hyprland config in `~/.config/hypr` |
 | claude | Claude Code + the hooks in `claude-hooks/` |
@@ -304,11 +304,65 @@ defaults declared at the top of `calendar_agenda.py`:
   "horizon_min": 120,
   "title_from_min": 15,
   "reminders": [10, 2],
-  "calendars": ["you@example.com"]
+  "calendars": ["you@example.com"],
+  "chrome_profiles": {"you@work.example": "Profile 6"},
+  "chrome_workspace": 2
 }
 ```
 
 Don't want it? Remove `custom/calendar` from `group/status` in `config-full`.
+
+### Opening an event in the right Chrome profile
+
+Work calendars are usually shared into a personal account, so they all show up
+in the popup — but clicking one from the wrong profile gets you *"you do not
+have access to this event"*. A Google calendar id **is** an email address, so
+`chrome-open.py` maps it to the Chrome profile signed in to that account (read
+from `~/.config/google-chrome/Local State`) and opens the link there. Profiles
+never signed in to Google declare no account: name those in `chrome_profiles`.
+`authuser=` is appended to the URL as well — one profile can hold several
+accounts, and Google would otherwise pick the first.
+
+Two things make this less obvious than it sounds. **`--profile-directory` is
+only honoured at startup**: with Chrome already running, an URL goes to
+whichever window has focus, whatever its profile — only `--new-window` forces
+the profile. And **no window says which profile it belongs to**: they all carry
+the `google-chrome` class, so neither a `windowrule` nor a lookup can find the
+window to reuse. So the script keeps that table itself in `$XDG_RUNTIME_DIR`,
+focuses the profile's window and lets Chrome follow the focus, and creates one
+only when there is none — `chrome-open.py --record <profile> <address>` lets a
+startup script declare the windows it opened.
+
+`chrome_workspace` is where a newly created window lands: it joins the Chrome
+window group already sitting there (unlock, spawn, relock — the same trick a
+startup layout uses to build that group). `0` leaves the window wherever it
+opens.
+
+### Browser media
+
+Chrome publishes title and artist over MPRIS, but only once its media session
+is established; until then `Metadata` holds `mpris:length` alone. So
+`media-menu.py` reads MPRIS first and falls back to the Hyprland window title
+only when that comes back empty — the window title is the *active tab's*, which
+is what you are looking at, not necessarily what is playing.
+
+That distinction drives `mpris-pip.sh`, which has two modes, because the PiP
+shortcut only ever reaches the active tab of the focused window and nothing
+from outside can select a tab (Chrome reports `CanRaise = false` and publishes
+no `xesam:url`):
+
+| Call | Means | Target |
+|------|-------|--------|
+| `mpris-pip.sh` (right click) | "pop out what I'm looking at" | most recently focused Chrome window |
+| `mpris-pip.sh --playing` (menu) | "pop out what is playing" | window whose title carries the MPRIS title; notifies if none does |
+
+Matching strips Unicode direction marks — YouTube wraps channel names in them,
+so the window title carries them and the MPRIS title does not.
+
+**Known limit**: a video playing in a background tab cannot be popped out. The
+menu says so rather than popping out a different video, which is what the two
+earlier versions did — first by picking an arbitrary Chrome window, then by
+picking whichever window's title said "YouTube".
 
 ## Layout
 
@@ -319,6 +373,7 @@ Don't want it? Remove `custom/calendar` from `group/status` in `config-full`.
 | `generate-config.py` | `config-full` → `config-active` |
 | `autofit.py` | folds modules away when the bar overflows |
 | `calendar_agenda.py` | Google Calendar: OAuth, sync, reminders, module JSON |
+| `chrome-open.py` | opens an URL in a given Chrome profile, on a given workspace |
 | `*-menu.py` | one popup per module |
 | `*.sh` | small stateless helpers (toggles, watchers, status JSON) |
 
