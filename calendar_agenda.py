@@ -185,7 +185,8 @@ def open_command(url, calendar=None, conf=None):
     conf = settings() if conf is None else conf
     profile = chrome_profile(calendar, conf)
     if not profile:
-        return ["setsid", "-f", "google-chrome-stable", url]
+        return ["uwsm", "app", "-t", "service", "-S", "both",
+                "--", "google-chrome-stable", url]
     return [CHROME_OPEN, profile, with_authuser(url, calendar),
             str(conf.get("chrome_workspace", DEFAULTS["chrome_workspace"]))]
 
@@ -552,9 +553,13 @@ def notify(event, threshold):
         # Même chemin d'ouverture que le popup : rejoindre une visio depuis le
         # mauvais profil Google demande de rebasculer de compte, ce qui est
         # exactement ce qu'on n'a pas le temps de faire à deux minutes.
+        # `uwsm app -t service` place l'ouverture dans son propre service
+        # systemd : détachée du tick comme le faisait `setsid -f`, mais aussi
+        # hors du cgroup ET du groupe de processus de waybar, qui emportait
+        # Chrome à chaque crash comme à chaque rechargement de la barre.
         cmd = open_command(link, event.get("calendar"))
-        if cmd[0] != "setsid":
-            cmd = ["setsid", "-f"] + cmd
+        if cmd[0] != "uwsm":
+            cmd = ["uwsm", "app", "-t", "service", "-S", "both", "--"] + cmd
         script = ('out=$("$@"); [ "$out" = join ] && exec %s'
                   % " ".join(shquote(a) for a in cmd))
         args = ["bash", "-c", script, "bash"] + args

@@ -140,18 +140,25 @@ def apply_stealth(cfg):
 def apply_ws_mode(cfg):
     """Adapte le module workspaces selon le mode dizaines (+10).
 
-    - mode unités   : affiche 1-10  (cache 11-20), chiffres normaux
-    - mode dizaines : affiche 11-20 (cache 1-10),  chiffres en mauve
+    - mode unités   : chiffres normaux
+    - mode dizaines : chiffres teintés
+
+    Le masquage de la décade d'en face a disparu avec la bascule du module sur
+    `ext/workspaces` (config-full) : `hyprland/workspaces` changeait de bureau
+    en envoyant `dispatch workspace <n>` sur le socket IPC, syntaxe hyprlang
+    qu'Hyprland refuse depuis que la config est en Lua — le clic ne faisait
+    plus rien, en silence. `ext/workspaces` passe par le protocole
+    ext-workspace-v1, mais n'a pas d'option `ignore-workspaces` (waybar
+    l'accepte sans rien en faire). La barre montre donc les bureaux occupés
+    des deux décades ; seule la teinte dit dans laquelle tapent les touches.
     """
-    ws = cfg.get("hyprland/workspaces")
+    ws = cfg.get("ext/workspaces")
     if not ws:
         return
     if os.path.exists(TENS_FLAG):
         ws["format"] = "<span color='%s'>{name}</span>" % TENS_COLOR
-        ws["ignore-workspaces"] = ["^([1-9]|10)$"]
     else:
         ws["format"] = "{name}"
-        ws["ignore-workspaces"] = ["^(1[1-9]|20)$"]
 
 
 def apply_overflow_badge(cfg, auto_hidden):

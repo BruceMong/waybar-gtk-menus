@@ -61,6 +61,10 @@ KEY_LABEL = {
     "twosuperior": "²",
     "period": ".", "comma": ",", "semicolon": ";", "equal": "=",
     "prior": "Page ↑", "next": "Page ↓",
+    # Interrupteurs (bindl sur `switch:`) : ce ne sont pas des touches, mais
+    # ils occupent la même colonne et méritent d'être lisibles.
+    "switch:on:lid switch": "Capot fermé",
+    "switch:off:lid switch": "Capot ouvert",
 }
 
 # Dispatchers Lua (hl.dsp.*) -> libellé lisible. `exec_cmd` est traité à part :
@@ -123,9 +127,13 @@ SUGGESTIONS = [
     {"mods": ["SUPER"], "key": "K",
      "label": "Centrer la fenêtre flottante",
      "line": 'hl.bind(mainMod .. " + K", hl.dsp.window.center())'},
-    {"mods": ["SUPER"], "key": "O",
+    # Super+O est parti à l'OCR (2026-09-05). Alt+² plutôt qu'une lettre libre
+    # au hasard : Super+² ramène déjà au bureau précédent, la même touche sous
+    # un autre modificateur ramène à la fenêtre précédente. Le geste s'apprend
+    # une fois pour les deux.
+    {"mods": ["ALT"], "key": "twosuperior",
      "label": "Revenir à la fenêtre précédente",
-     "line": 'hl.bind(mainMod .. " + O", hl.dsp.focus({ window = "last" }))'},
+     "line": 'hl.bind("ALT + twosuperior", hl.dsp.focus({ window = "last" }))'},
     {"mods": ["SUPER", "SHIFT"], "key": "Tab",
      "label": "Sélecteur de fenêtres (Walker)",
      "line": 'hl.bind(mainMod .. " + SHIFT + Tab", hl.dsp.exec_cmd("walker -m windows"))'},
@@ -434,8 +442,12 @@ def parse_binds():
             combo = keys_expr_to_combo(keys_expr, variables)
             key = combo_key(combo)
             # Un bind souris est marqué par l'option `mouse` (ancien `bindm`),
-            # ou porte directement une pseudo-touche mouse:272.
-            is_mouse = key.lower().startswith("mouse") or "mouse" in opts
+            # ou porte directement une pseudo-touche mouse:272. Les
+            # interrupteurs (`switch:on:Lid Switch`) sont dans le même cas :
+            # aucune capture au clavier ne peut produire cette « touche », et
+            # laisser la ligne éditable revenait à offrir de réassigner le
+            # capot de l'écran à Super + K.
+            is_mouse = key.lower().startswith(("mouse", "switch:")) or "mouse" in opts
             binds.append({
                 "file": path,
                 "lineno": lineno,

@@ -57,8 +57,21 @@ def _script(name):
 MODULES = [
     Module(["custom/ws-tens"], "\U000f0b35", "Bouton +10",
            _script("ws-tens-toggle.sh")),
+    # Trois liens rattachent un enfant à la barre, et il faut les couper tous
+    # les trois. `setsid -f` n'en coupait qu'un (la session), `uwsm app` en
+    # mode scope — son défaut — n'en coupe qu'un autre (le cgroup) :
+    #   - cgroup : waybar.service est en KillMode=control-group, donc systemd
+    #     tue tout le groupe de contrôle avant de redémarrer la barre. Chrome y
+    #     laissait ses renderers et son GPU process, et se retrouvait amputé
+    #     d'un coup : CHECK interne, SIGTRAP. Deux fois dans la nuit du
+    #     2026-09-05, à la seconde près du segfault de waybar.
+    #   - groupe de processus : waybar tue ses enfants à chaque rechargement.
+    #     Chrome mourait donc aussi sur un simple SIGUSR2, sans crash de barre.
+    #   - session.
+    # `-t service` fait forker le processus par systemd --user, ce qui les
+    # coupe tous les trois. `-S both` remplace la redirection vers /dev/null.
     Module(["custom/chrome"], "\U000f02af", "Chrome",
-           "setsid -f google-chrome-stable"),
+           "uwsm app -t service -S both -- google-chrome-stable"),
     Module(["hyprland/window"], "\U000f05d0", "Fenêtre"),
     # transient : le module s'efface de lui-même dès qu'aucun lecteur ne
     # tourne (`format-stopped` vide dans config-full), et son menu doit

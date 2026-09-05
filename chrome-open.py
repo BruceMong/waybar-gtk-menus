@@ -39,6 +39,16 @@ import sys
 import time
 
 CHROME = "google-chrome-stable"
+# `uwsm app -t service` et non un lancement nu. Deux liens rattachent sinon
+# Chrome à la barre, et il faut couper les deux :
+#   - le cgroup, hérité de l'appelant (waybar.service). L'unité étant en
+#     KillMode=control-group, un segfault de la barre emportait le navigateur.
+#   - le groupe de processus, qu'un `scope` laisse lui aussi intact : waybar
+#     tue ses enfants à chaque rechargement, et Chrome mourait au reload sans
+#     que la barre ait crashé.
+# `-t service` fait forker le processus par systemd --user : nouveau cgroup,
+# nouveau groupe, nouvelle session. `setsid -f` ne coupait que le troisième.
+LAUNCH = ["uwsm", "app", "-t", "service", "-S", "both", "--", CHROME]
 CLASS = "google-chrome"          # fenêtres ordinaires ; les PWA ont la leur
 DEVNULL = subprocess.DEVNULL
 
@@ -140,6 +150,16 @@ def wait_title(address, before_title):
     disparaître le popup sur une fenêtre encore vide, et l'utilisateur
     reclique.
     """
+    # Une fenetre lancee sous --window-name porte un titre fige, que la page
+    # affichee ne change plus (c'est ainsi que les onglets du groupe du bureau
+    # 2 sont etiquetes par compte). L'attendre changer, c'est attendre le
+    # timeout entier a chaque clic : on se contente d'une pause courte. Le
+    # suffixe est le seul marqueur disponible, une fenetre Chrome ordinaire
+    # finissant toujours par le nom du navigateur.
+    if not before_title.endswith("Google Chrome"):
+        time.sleep(1.0)
+        return
+
     deadline = time.time() + TIMEOUT
     while time.time() < deadline:
         time.sleep(POLL)
@@ -153,7 +173,7 @@ def reuse(address, url):
     before_title = windows().get(address, ("", None))[0]
     dispatch("focuswindow", "address:%s" % address)
     time.sleep(0.3)
-    subprocess.Popen([CHROME, url], start_new_session=True,
+    subprocess.Popen(LAUNCH + [url], start_new_session=True,
                      stdout=DEVNULL, stderr=DEVNULL)
     wait_title(address, before_title)
     dispatch("focuswindow", "address:%s" % address)
@@ -173,8 +193,8 @@ def create(profile, url, workspace, before):
             dispatch("workspace", str(workspace))
         time.sleep(0.25)
 
-    subprocess.Popen([CHROME, "--profile-directory=%s" % profile,
-                      "--new-window", url],
+    subprocess.Popen(LAUNCH + ["--profile-directory=%s" % profile,
+                               "--new-window", url],
                      start_new_session=True, stdout=DEVNULL, stderr=DEVNULL)
     target = wait_new(before)
 

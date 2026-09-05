@@ -29,7 +29,8 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib  # noqa: E402
 
-from menu_common import LayerPopup, run_popup, caption_label  # noqa: E402
+from menu_common import (LayerPopup, run_popup, caption_label,  # noqa: E402
+                         clipboard_copy)
 
 import calendar_agenda as ca
 
@@ -318,8 +319,9 @@ class CalendarPopup(LayerPopup):
     def _copy_date(self, _btn):
         """La date au format ISO dans le presse-papier — pour nommer un
         fichier, dater un devis, remplir un champ."""
-        subprocess.Popen(["wl-copy", date.today().isoformat()],
-                         stdout=DEVNULL, stderr=DEVNULL)
+        # clipboard_copy et non Popen direct : wl-copy doit vivre hors du
+        # control-group de waybar pour survivre à un redémarrage de la barre.
+        clipboard_copy(date.today().isoformat())
         subprocess.Popen(["notify-send", "-a", "Agenda", "Date copiée",
                           date.today().isoformat()],
                          stdout=DEVNULL, stderr=DEVNULL)

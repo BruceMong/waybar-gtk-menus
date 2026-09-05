@@ -18,7 +18,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib  # noqa: E402
 
 from menu_common import (Card, LayerPopup,  # noqa: E402
-                         caption_label, control_row, run_popup)
+                         caption_label, clipboard_copy, control_row, run_popup)
 
 DEVNULL = subprocess.DEVNULL
 TERM_CLASS = "journal-view"
@@ -200,16 +200,11 @@ def _config_files(scope, unit):
 def copy_to_clipboard(text):
     """Pousse le texte dans le presse-papier Wayland.
 
-    wl-copy se détache tout seul pour continuer à servir la sélection après
-    la fermeture de la popup : on n'attend surtout pas qu'il se termine.
+    Délègue à menu_common.clipboard_copy, qui sort wl-copy du control-group
+    de waybar — sans quoi le rapport copié disparaissait du presse-papier au
+    premier redémarrage de la barre.
     """
-    try:
-        proc = subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE,
-                                stdout=DEVNULL, stderr=DEVNULL, text=True)
-        proc.communicate(text, timeout=5)
-        return proc.returncode == 0
-    except Exception:
-        return False
+    return clipboard_copy(text)
 
 
 class SystemdPopup(LayerPopup):
@@ -274,9 +269,15 @@ class SystemdPopup(LayerPopup):
         # -- En-tête : le nom de l'unité, sa portée, ce qu'elle fait --
         head = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         title = Gtk.Label(xalign=0)
+        # #77777c et non rgba(235,235,245,0.4) : le markup Pango ne connaît pas
+        # rgba(), il rejette l'attribut ET tout le markup avec lui — le titre
+        # de la carte s'affichait alors en texte brut, balises comprises
+        # (« Failed to set text ... could not be parsed » dans le journal).
+        # C'est l'équivalent opaque du gris à 40 % sur le fond d'une carte,
+        # calculé comme les DIM/FAINT de claude-menu.py.
         title.set_markup(
             "<b><span foreground='#ff453a'>%s</span></b>"
-            "  <span foreground='rgba(235,235,245,0.4)' size='small'>%s</span>"
+            "  <span foreground='#77777c' size='small'>%s</span>"
             % (GLib.markup_escape_text(unit), scope))
         title.set_line_wrap(True)
         head.pack_start(title, False, False, 0)

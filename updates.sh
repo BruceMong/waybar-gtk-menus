@@ -11,7 +11,50 @@
 set -uo pipefail
 
 CACHE="${XDG_RUNTIME_DIR:-/tmp}/waybar-updates.cache"
+META="${XDG_RUNTIME_DIR:-/tmp}/waybar-updates.meta"
 DIR="$(dirname "$(readlink -f "$0")")"
+
+# Métadonnées du popup : taille restant à télécharger, part des paquets
+# installés explicitement, date du dernier `pacman -Syu`. Elles coûtaient
+# ~450 ms — dont 370 pour le seul `pacman -Sp` — et étaient calculées au clic,
+# fenêtre non encore dessinée. Le module tourne de toute façon toutes les
+# 30 min : autant les payer là, en arrière-plan.
+#
+# `sig` scelle le fichier au contenu du cache dont il est tiré : le popup
+# recalcule cette empreinte et retombe sur son propre calcul si elle diffère
+# (meta absent, périmé, écrit par une version antérieure).
+write_meta() {
+    local repo="$1" aur="$2"
+    local db="${CHECKUPDATES_DB:-/tmp/checkup-db-$(id -u)}"
+    local names sig size last apps
+
+    names="$(awk 'NF {print $1}' <<< "$repo")"
+    sig="$(printf '%s\n---\n%s\n' "$repo" "$aur" | sha1sum | cut -d' ' -f1)"
+
+    size=0
+    if [ -n "$names" ] && [ -d "$db" ]; then
+        # shellcheck disable=SC2086 — découpage voulu : un argument par paquet.
+        size="$(pacman -Sp --dbpath "$db" --print-format '%s' $names 2>/dev/null \
+                | awk '{s += $1} END {print s + 0}')"
+    fi
+
+    # Horodatage brut : « il y a 2 jours » se périme, pas l'epoch.
+    last="$(tac /var/log/pacman.log 2>/dev/null \
+            | grep -m1 -F 'starting full system upgrade' \
+            | sed -n 's/^\[\([^]]*\)\].*/\1/p')"
+    last="$(date -d "$last" +%s 2>/dev/null || true)"
+
+    apps=""
+    [ -n "$names" ] && apps="$(comm -12 <(sort -u <<< "$names") \
+                                        <(pacman -Qqe 2>/dev/null | sort) | tr '\n' ' ')"
+
+    # Écriture atomique : le popup ne doit jamais lire un fichier à moitié écrit.
+    { printf 'sig %s\n' "$sig"
+      printf 'size %s\n' "$size"
+      printf 'last %s\n' "$last"
+      printf 'apps %s\n' "$apps"
+    } > "$META.tmp" && mv -f "$META.tmp" "$META"
+}
 
 collect() {
     # checkupdates (pacman-contrib) : synchro dans une base temporaire,
@@ -20,6 +63,7 @@ collect() {
     repo="$(checkupdates 2>/dev/null || true)"
     aur="$(yay -Qua 2>/dev/null || true)"
     printf '%s\n---\n%s\n' "$repo" "$aur" > "$CACHE"
+    write_meta "$repo" "$aur" >/dev/null 2>&1
     printf '%s\n---\n%s\n' "$repo" "$aur"
 }
 

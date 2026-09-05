@@ -333,9 +333,12 @@ window#waybar {
     border-radius: 6px;
 }
 
-/* hyprland/workspaces expose `.empty` (et non `.occupied`) : on stylise donc
-   par la négative — un workspace qui contient quelque chose remonte d'un cran
-   dans la hiérarchie d'encre. */
+/* `.empty` (et non `.occupied`) : on stylise donc par la négative — un
+   workspace qui contient quelque chose remonte d'un cran dans la hiérarchie
+   d'encre. La classe venait de `hyprland/workspaces` ; `ext/workspaces`, qui
+   l'a remplacé, ne la pose jamais — la règle s'applique alors à tous les
+   boutons, ce qui revient au même : ce module n'affiche que les workspaces
+   qui existent, donc jamais un bureau vide sauf celui où l'on se trouve. */
 #workspaces button:not(.empty) {
     color: @ink2;
 }

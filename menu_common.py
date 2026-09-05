@@ -368,6 +368,52 @@ def _hyprctl(*args):
         return None
 
 
+def _set_follow_mouse(value):
+    """Change input:follow_mouse à chaud.
+
+    `hyprctl keyword` est mort depuis la bascule de la config sur
+    hyprland.lua : il répond « keyword can't work with non-legacy parsers.
+    Use eval. » — et rend malgré tout un code de sortie 0, donc l'échec ne se
+    voyait nulle part. Les menus croyaient avoir détaché le focus et se
+    fermaient au premier passage de la souris sur une autre fenêtre.
+    """
+    _hyprctl("eval", "hl.config({ input = { follow_mouse = %d } })" % int(value))
+
+
+def clipboard_copy(text):
+    """Met `text` dans le presse-papier, hors du cgroup de waybar.
+
+    wl-copy doit survivre à la popup qui l'a lancé : c'est lui qui sert la
+    sélection tant que personne d'autre ne la revendique. Lancé simplement
+    depuis un menu, il reste dans le control-group de waybar.service — et
+    waybar segfaute assez souvent pour que ça compte : au redémarrage,
+    systemd tue le control-group entier, wl-copy avec, et le presse-papier
+    se vide sans que rien ne le dise. C'est le même piège que Chrome lancé
+    depuis la barre (cf. modules_registry.py).
+
+    `--service-type=exec` avec `wl-copy -f` : sans `-f`, wl-copy se
+    démonise, le processus principal du service sort aussitôt et systemd
+    nettoie derrière lui — la copie ne tenait pas une seconde.
+    """
+    try:
+        r = subprocess.run(
+            ["systemd-run", "--user", "--collect", "--quiet",
+             "--service-type=exec", "wl-copy", "-f", text],
+            timeout=5, check=False, capture_output=True, text=True)
+        if r.returncode == 0:
+            return True
+    except (OSError, subprocess.SubprocessError):
+        pass
+    # Pas de systemd --user (session hors uwsm) : mieux vaut une copie
+    # fragile que pas de copie du tout.
+    try:
+        subprocess.Popen(["wl-copy", text],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except OSError:
+        return False
+
+
 def _config_follow_mouse():
     """Valeur de input:follow_mouse telle qu'écrite dans hyprland.lua.
 
@@ -453,7 +499,7 @@ def detach_pointer_focus():
         return
     _focus_detached = True
     _write_lock(_lock_pids() + [(os.getpid(), _proc_start(os.getpid()))])
-    _hyprctl("keyword", "input:follow_mouse", "2")
+    _set_follow_mouse(2)
     atexit.register(restore_pointer_focus)
     # Un SIGTERM (fin de session, pkill) doit lui aussi rendre le réglage :
     # atexit ne s'exécuterait pas. GLib.unix_signal_add fait passer le signal
@@ -513,7 +559,7 @@ def restore_pointer_focus():
     others = [e for e in _lock_pids() if e[0] != os.getpid()]
     _write_lock(others)
     if not others:
-        _hyprctl("keyword", "input:follow_mouse", str(_config_follow_mouse()))
+        _set_follow_mouse(_config_follow_mouse())
 
 
 def apply_css():

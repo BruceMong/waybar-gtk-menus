@@ -1,5 +1,20 @@
 #!/bin/bash
 # Toggle mode remote : lock + pas de suspend + luminosité min + barre rouge
+#
+# « Pas de suspend » couvre aussi le capot rabattu : l'inhibiteur porte
+# `handle-lid-switch`, sans quoi logind suspendrait la machine dès la fermeture
+# de l'écran — les deux autres verrous (`idle`, `sleep`) ne portent que sur
+# l'inactivité et sur les demandes de veille, pas sur l'événement capot, que
+# logind traite par un chemin séparé. C'est ce qui permet de laisser tourner une
+# session Claude Code portable fermé, dans un sac.
+#
+# `handle-power-key` est de la même famille : portable fermé et remué, le bouton
+# d'alimentation — logé dans le clavier — peut être enfoncé par les touches
+# d'en face, et son action par défaut est l'extinction immédiate.
+#
+# L'extinction du panneau à la fermeture n'est PAS faite ici : elle est confiée
+# à un bind Hyprland sur le capot (scripts/lid-remote.sh), pour ne pas laisser
+# l'écran allumé lorsque le mode est activé portable ouvert, sur le bureau.
 
 # État de session : $XDG_RUNTIME_DIR est privé à l'utilisateur et vidé à la
 # déconnexion, là où /tmp est partagé entre comptes et survit à la session —
@@ -46,7 +61,7 @@ else
     brightnessctl get > "$BRIGHTNESS_SAVE"
     brightnessctl set 1
 
-    systemd-inhibit --what=idle:sleep --who="remote-mode" --why="Mode remote actif" --mode=block sleep infinity &
+    systemd-inhibit --what=idle:sleep:handle-lid-switch:handle-power-key --who="remote-mode" --why="Mode remote actif" --mode=block sleep infinity &
     echo $! > "$INHIBIT_PID"
 
     touch "$STATE_FILE"

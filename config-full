@@ -5,7 +5,7 @@
     "spacing": 2,
     "reload_style_on_change": true,
 
-    "modules-left": ["hyprland/workspaces", "custom/ws-tens", "hyprland/window", "custom/chrome", "mpris"],
+    "modules-left": ["ext/workspaces", "custom/ws-tens", "hyprland/window", "custom/chrome", "mpris"],
     "modules-center": [],
     "modules-right": ["custom/voice-rec", "custom/recorder", "privacy", "group/systray", "group/tools", "group/status", "group/system", "group/connect", "pulseaudio#mic", "group/audio", "backlight", "idle_inhibitor", "power-profiles-daemon", "battery", "group/datetime", "custom/power"],
 
@@ -27,7 +27,7 @@
                 "on-scroll-down": "shift_down"
             },
             "on-click": "~/.config/waybar/calendar-menu.py 60",
-            "on-click-right": "google-chrome-stable https://calendar.google.com"
+            "on-click-right": "uwsm app -t service -S both -- google-chrome-stable https://calendar.google.com"
         }
     },
 
@@ -89,8 +89,11 @@
         "modules": ["pulseaudio#icon", "pulseaudio#percentage"]
     },
 
-    "hyprland/workspaces": {
-        "format": "{name}"
+    "ext/workspaces": {
+        "format": "{name}",
+        "on-click": "activate",
+        "sort-by-name": true,
+        "sort-by-id": false
     },
 
     "hyprland/window": {
@@ -333,7 +336,7 @@
         "signal": 14,
         "max-length": 30,
         "on-click": "~/.config/waybar/calendar_agenda.py --menu",
-        "on-click-right": "google-chrome-stable https://calendar.google.com"
+        "on-click-right": "uwsm app -t service -S both -- google-chrome-stable https://calendar.google.com"
     },
 
     "custom/updates": {
@@ -348,7 +351,7 @@
     "custom/chrome": {
         "format": "󰊯",
         "tooltip": "Google Chrome",
-        "on-click": "setsid -f google-chrome-stable"
+        "on-click": "uwsm app -t service -S both -- google-chrome-stable"
     },
 
     "custom/ws-tens": {

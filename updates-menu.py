@@ -12,6 +12,7 @@ faudra redémarrer. Ce menu classe les paquets en trois familles lisibles :
 
 Les paquets AUR sont comptés à part : ils se recompilent, donc plus lents.
 """
+import hashlib
 import os
 import shlex
 import shutil
@@ -32,6 +33,7 @@ UPDATES_SH = os.path.join(CONFIG_DIR, "updates.sh")
 # déconnexion, là où /tmp est partagé entre comptes et survit à la session.
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
 CACHE = os.path.join(RUNTIME_DIR, "waybar-updates.cache")
+META = os.path.join(RUNTIME_DIR, "waybar-updates.meta")
 PACMAN_LOG = "/var/log/pacman.log"
 DEVNULL = subprocess.DEVNULL
 
@@ -120,10 +122,10 @@ def read_cache():
         with open(CACHE) as fh:
             raw = fh.read()
     except OSError:
-        return [], []
+        return [], [], ""
     head, _, tail = raw.partition("\n---\n")
     parse = lambda block: [l.split()[0] for l in block.splitlines() if l.strip()]
-    return parse(head), parse(tail)
+    return parse(head), parse(tail), raw
 
 
 def explicit_packages():
@@ -133,6 +135,18 @@ def explicit_packages():
         return set(out.split())
     except (OSError, subprocess.SubprocessError):
         return set()
+
+
+def since_label(when):
+    """« hier », « il y a 3 jours » — à partir d'un epoch."""
+    if not when:
+        return None
+    days = int((time.time() - when) // 86400)
+    if days == 0:
+        return "aujourd'hui"
+    if days == 1:
+        return "hier"
+    return "il y a %d jours" % days
 
 
 def last_upgrade():
@@ -145,15 +159,38 @@ def last_upgrade():
                     stamp = line[1:line.index("]")]
         if not stamp:
             return None
-        when = time.mktime(time.strptime(stamp[:19], "%Y-%m-%dT%H:%M:%S"))
+        return since_label(time.mktime(time.strptime(stamp[:19],
+                                                     "%Y-%m-%dT%H:%M:%S")))
     except (OSError, ValueError):
         return None
-    days = int((time.time() - when) // 86400)
-    if days == 0:
-        return "aujourd'hui"
-    if days == 1:
-        return "hier"
-    return "il y a %d jours" % days
+
+
+def read_meta(raw):
+    """Métadonnées pré-calculées par updates.sh, ou None.
+
+    Trois appels — `pacman -Sp`, `pacman -Qqe`, la lecture du log — tenaient la
+    fenêtre fermée pendant une demi-seconde. updates.sh les fait maintenant en
+    amont, à chaque relevé du module. `sig` garantit que le fichier décrit bien
+    le cache qu'on vient de lire : sinon on refait le calcul soi-même.
+    """
+    try:
+        with open(META) as fh:
+            meta = dict(line.split(" ", 1) for line in fh.read().splitlines()
+                        if " " in line)
+    except (OSError, ValueError):
+        return None
+    want = hashlib.sha1(raw.encode()).hexdigest()
+    if meta.get("sig", "").strip() != want:
+        return None
+    try:
+        size = int(meta.get("size", "").strip() or 0)
+    except ValueError:
+        size = 0
+    try:
+        last = int(meta.get("last", "").strip() or 0)
+    except ValueError:
+        last = 0
+    return {"size": size, "last": last, "apps": set(meta.get("apps", "").split())}
 
 
 def download_size(pkgs):
@@ -203,8 +240,9 @@ class UpdatesPopup(LayerPopup):
     # ---- Construction ----
 
     def _build(self):
-        repo, aur = read_cache()
-        explicit = explicit_packages()
+        repo, aur, raw = read_cache()
+        meta = read_meta(raw)
+        explicit = meta["apps"] if meta else explicit_packages()
 
         system = [p for p in repo if matches(p, SYSTEM_PKGS)]
         apps = [p for p in repo if p not in system and p in explicit]
@@ -212,7 +250,7 @@ class UpdatesPopup(LayerPopup):
         total = len(repo) + len(aur)
 
         if total == 0:
-            since = last_upgrade()
+            since = since_label(meta["last"]) if meta else last_upgrade()
             state = self.add_card()
             row = state.action(self.IC_OK, "Système à jour",
                                subtitle=("Dernière mise à jour : %s" % since)
@@ -221,15 +259,15 @@ class UpdatesPopup(LayerPopup):
             actions = self.add_card()
             actions.action(self.IC_REFRESH, "Vérifier maintenant",
                            on_click=self._refresh)
-            self._add_supervised(actions, upgrade=False)
+            self._add_supervised(actions)
             return
 
         # -- Résumé --
-        size = download_size(repo)
+        size = meta["size"] / 1024 / 1024 if meta else download_size(repo)
         sub = []
         if size is not None and size >= 1:
             sub.append("%.0f Mo à télécharger" % size)
-        since = last_upgrade()
+        since = since_label(meta["last"]) if meta else last_upgrade()
         if since:
             sub.append("dernière mise à jour %s" % since)
 
@@ -279,17 +317,37 @@ class UpdatesPopup(LayerPopup):
         self.box.pack_start(exp, False, False, 0)
 
         # -- Actions --
-        # La mise à jour complète ouvre un terminal et demande le mot de passe :
-        # c'est un engagement, pas une ligne de liste. Elle garde son bouton.
+        # Deux engagements — chacun ouvre un terminal et travaille plusieurs
+        # minutes —, pas des lignes de liste : chacun garde son bouton.
+        #
+        # L'action mise en avant est la session Claude. `yay -Syu` installe et
+        # s'arrête là ; la session lit ce que la mise à jour laisse derrière —
+        # .pacnew à fusionner, unités en échec, annonces Arch — et resynchronise
+        # le dépôt de config. C'est la moitié du travail que le bouton brut ne
+        # fait pas, et celle qu'on oublie.
+        supervised = None
+        if CLAUDE_BIN:
+            supervised = Gtk.Button(
+                label="%s  Mettre à jour avec Claude" % self.IC_SUPERVISED)
+            supervised.set_tooltip_text(
+                "Installe, contrôle ce que la mise à jour laisse à faire, "
+                "puis resynchronise le dépôt de config")
+            supervised.connect("clicked", lambda _b: self._supervised(True))
+
         btn = Gtk.Button(label="\U000f06b1  Tout mettre à jour")
-        btn.get_style_context().add_class("accent")
+        btn.set_tooltip_text("yay -Syu dans un terminal, sans relecture ensuite")
         btn.connect("clicked", self._upgrade)
-        self.box.pack_start(btn, False, False, 0)
+
+        # Le bleu d'accent ne se porte qu'une fois par fenêtre : il désigne
+        # l'action recommandée, pas « les boutons ». Sans Claude installé,
+        # c'est la mise à jour brute qui le reprend.
+        (supervised or btn).get_style_context().add_class("accent")
+        for b in filter(None, (supervised, btn)):
+            self.box.pack_start(b, False, False, 0)
 
         more = self.add_card()
         more.action(self.IC_REFRESH, "Actualiser la liste",
                     on_click=self._refresh)
-        self._add_supervised(more, upgrade=True)
 
     @staticmethod
     def _tint(row, css):
@@ -320,15 +378,18 @@ class UpdatesPopup(LayerPopup):
             stdout=DEVNULL, stderr=DEVNULL)
         self.close()
 
-    def _add_supervised(self, card, upgrade):
-        """Ligne « mise à jour par Claude », si Claude Code est installé."""
+    def _add_supervised(self, card):
+        """Ligne « resynchroniser la config », si Claude Code est installé.
+
+        Réservée à l'écran « système à jour » : rien à installer, donc pas
+        d'action principale à mettre en avant — reste le dépôt de config, qui
+        peut avoir dérivé depuis la dernière mise à jour.
+        """
         if not CLAUDE_BIN:
             return
-        card.action(self.IC_SUPERVISED,
-                    "Mise à jour par Claude" if upgrade else "Resynchroniser la config",
-                    subtitle=("installe, contrôle et resynchronise la config"
-                              if upgrade else "session Claude sur le dépôt de config"),
-                    on_click=lambda _b: self._supervised(upgrade))
+        card.action(self.IC_SUPERVISED, "Resynchroniser la config",
+                    subtitle="session Claude sur le dépôt de config",
+                    on_click=lambda _b: self._supervised(False))
 
     def _supervised(self, upgrade):
         """Ouvre une session Claude qui mène la mise à jour de bout en bout.
