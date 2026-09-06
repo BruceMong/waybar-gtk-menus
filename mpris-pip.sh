@@ -5,30 +5,43 @@
 #   mpris-pip.sh --playing    « sors ce qui joue »        (media-menu.py)
 #
 # Prérequis (une seule fois, côté Chrome) :
-#   1. Installer l'extension « Picture-in-Picture Extension (by Google) »
-#   2. chrome://extensions/shortcuts → lui assigner Alt+P, portée « Dans Chrome »
+#   1. chrome://extensions → mode développeur → « Charger l'extension non
+#      empaquetée » → ~/.config/waybar/pip-extension
+#   2. chrome://extensions/shortcuts → lui assigner Alt+Shift+P, portée
+#      « Dans Chrome ». Alt+P reste libre pour l'extension de Google, qui peut
+#      donc rester installée : les deux se complètent au clavier.
+#
+# Pourquoi pas SUPER+P : Chrome n'accepte que Ctrl, Alt et Shift dans les
+# raccourcis d'extension — pas Meta — et refuse Ctrl+Alt (AltGr). SUPER est de
+# toute façon le mainMod d'Hyprland, qui intercepte avant Chrome.
 #
 # Le clic Waybar n'étant pas un geste utilisateur valide pour la page, on donne
 # le focus à Chrome puis on envoie le raccourci de l'extension.
 #
-# ── Pourquoi deux modes ──────────────────────────────────────────────────────
-# Le raccourci agit sur l'onglet ACTIF de la fenêtre focalisée. C'est toute la
-# contrainte : rien, depuis l'extérieur, ne permet de désigner un onglet.
+# ── Pourquoi une extension maison ────────────────────────────────────────────
+# Le raccourci arrive dans la fenêtre focalisée ; rien, depuis l'extérieur, ne
+# permet de désigner un ONGLET. L'extension de Google s'en tenait donc à
+# l'onglet actif : vidéo passée en arrière-plan, le clic droit ne faisait rien,
+# et rien ne le disait. Celle du dépôt (pip-extension/) cherche elle-même
+# l'onglet qui porte une vidéo, dans toutes les fenêtres, et ne bascule dessus
+# que si la page refuse le PiP depuis l'arrière-plan.
 #
-#   --playing  la vidéo visée est celle que Chrome publie sur MPRIS. On ne peut
-#              l'atteindre que si son onglet est au premier plan de sa fenêtre :
-#              on cherche donc la fenêtre dont le titre porte le titre MPRIS, et
-#              faute de la trouver on prévient au lieu de sortir une autre
-#              vidéo. Chrome n'implémente pas Raise() (CanRaise = false) et
-#              n'expose pas l'URL du morceau : il n'y a pas de moyen d'activer
-#              l'onglet qui joue.
+# Ce script garde malgré tout la charge de choisir la FENÊTRE : c'est elle qui
+# reçoit Alt+P, et une page d'une fenêtre masquée est « hidden » pour Chrome,
+# donc fondée à refuser le PiP. Viser juste évite ce détour.
 #
-#   (défaut)   le geste veut dire « celle que j'ai sous les yeux ». La fenêtre
-#              la plus récemment focalisée est la bonne réponse, sans autre
-#              condition. C'est ici que se trouvait le bug d'origine :
-#              `focuswindow class:^(google-chrome)$` prenait une fenêtre au
-#              hasard parmi les deux ouvertes, et le raccourci partait dans
-#              celle qui n'affichait aucune vidéo.
+# ── Ce que les deux modes veulent dire ───────────────────────────────────────
+#   --playing  « sors ce qui joue » : la fenêtre dont le titre porte celui que
+#              Chrome publie sur MPRIS. Faute de la trouver — l'onglet qui joue
+#              n'est pas au premier plan de sa fenêtre — on retombe sur la
+#              fenêtre la plus récente et on laisse l'extension viser l'onglet.
+#              Chrome n'implémente pas Raise() (CanRaise = false) et n'expose
+#              pas l'URL du morceau : il n'y a pas mieux de ce côté-ci.
+#
+#   (défaut)   « sors celle que j'ai sous les yeux » : la fenêtre la plus
+#              récemment focalisée, sans autre condition. C'est ici que se
+#              trouvait le bug d'origine : `focuswindow class:^(google-chrome)$`
+#              prenait une fenêtre au hasard parmi les deux ouvertes.
 
 CHROME_CLASS='google-chrome'
 
@@ -80,13 +93,11 @@ if [ "$mode" = "playing" ]; then
     if [ -z "$title" ]; then
         target=$(pick_focused)          # rien sur MPRIS : au moins viser l'écran
     else
+        # Aucune fenêtre ne porte ce titre : l'onglet qui joue est en
+        # arrière-plan. On vise la fenêtre la plus récente et l'extension ira
+        # chercher l'onglet — c'est exactement ce pour quoi elle existe.
         target=$(pick_by_title "$title")
-        if [ -z "$target" ]; then
-            # $'…' pour un vrai saut de ligne : notify-send n'interprète pas \n.
-            notify-send -a "Waybar" "Picture-in-Picture" \
-                "« $title »"$'\n'"joue dans un onglet en arrière-plan — affiche-le pour pouvoir le sortir en PiP."
-            exit 0
-        fi
+        [ -n "$target" ] || target=$(pick_focused)
     fi
 else
     target=$(pick_focused)
@@ -101,8 +112,9 @@ prev=$(hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty')
 hyprctl dispatch "hl.dsp.focus({ window = \"address:$target\" })" >/dev/null 2>&1 || exit 0
 sleep "$FOCUS_DELAY"
 
-# Raccourci de l'extension PiP (Alt+P).
-wtype -M alt -k p -m alt
+# Raccourci de l'extension du dépôt (Alt+Shift+P). Au-delà, c'est elle qui
+# choisit l'onglet, et qui notifie si aucun n'a de vidéo.
+wtype -M alt -M shift -k p -m shift -m alt
 
 # Revient à la fenêtre d'origine si ce n'était pas celle-là (PiP reste flottant).
 if [ -n "$prev" ] && [ "$prev" != "$target" ]; then

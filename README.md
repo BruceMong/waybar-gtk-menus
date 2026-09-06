@@ -125,7 +125,7 @@ surfaces, so the cost is limited to the bar and the popups.
 | brightness | `brightnessctl`, `hyprsunset` (night light), `hypridle` |
 | notifications / dnd | `swaync` |
 | updates | `checkupdates` (pacman-contrib), `yay` for AUR counts. With `claude` (Claude Code) on the PATH the popup grows a *supervised* run: a Claude session that upgrades the system itself, then reports on what the upgrade left behind — `.pacnew` files, failed units, orphans, Arch news — and syncs the config repo pointed at by `CONFIG_REPO` in `updates-menu.py`. It needs passwordless `sudo`; without it `yay` stalls on a password prompt the session has no terminal to answer |
-| media | `playerctl`, Waybar's `mpris` module — title while playing, greyed while paused, nothing when stopped. Left click opens `media-menu.py` (track, prev / play-pause / next, plus a player picker when several are running); scroll skips tracks, middle click goes back, right click toggles Chrome PiP (`wtype`, `jq`, and the Google PiP extension bound to Alt+P) |
+| media | `playerctl`, Waybar's `mpris` module — title while playing, greyed while paused, nothing when stopped. Left click opens `media-menu.py` (track, prev / play-pause / next, plus a player picker when several are running); scroll skips tracks, middle click goes back, right click toggles Chrome PiP (`wtype`, `jq`, and the bundled `pip-extension/` bound to Alt+Shift+P) |
 | systemd | `systemctl --user` / system units |
 | keybindings | Hyprland config in `~/.config/hypr` |
 | claude | Claude Code + the hooks in `claude-hooks/` |
@@ -347,22 +347,25 @@ only when that comes back empty — the window title is the *active tab's*, whic
 is what you are looking at, not necessarily what is playing.
 
 That distinction drives `mpris-pip.sh`, which has two modes, because the PiP
-shortcut only ever reaches the active tab of the focused window and nothing
-from outside can select a tab (Chrome reports `CanRaise = false` and publishes
-no `xesam:url`):
+shortcut only ever reaches the *focused window* and nothing from outside can
+select a tab (Chrome reports `CanRaise = false` and publishes no `xesam:url`):
 
-| Call | Means | Target |
+| Call | Means | Target window |
 |------|-------|--------|
 | `mpris-pip.sh` (right click) | "pop out what I'm looking at" | most recently focused Chrome window |
-| `mpris-pip.sh --playing` (menu) | "pop out what is playing" | window whose title carries the MPRIS title; notifies if none does |
+| `mpris-pip.sh --playing` (menu) | "pop out what is playing" | window whose title carries the MPRIS title, else the most recent one |
 
 Matching strips Unicode direction marks — YouTube wraps channel names in them,
 so the window title carries them and the MPRIS title does not.
 
-**Known limit**: a video playing in a background tab cannot be popped out. The
-menu says so rather than popping out a different video, which is what the two
-earlier versions did — first by picking an arbitrary Chrome window, then by
-picking whichever window's title said "YouTube".
+Picking the *tab* is [`pip-extension/`](pip-extension/)'s job, a small unpacked
+extension shipped here and bound to Alt+Shift+P alongside Google's. It searches
+every window for a tab holding a video, tries PiP without leaving the current
+tab, and only switches tabs — then switches straight back — if the page refuses
+from the background. Install it once: see its README.
+
+Until it existed, a video playing in a background tab simply could not be popped
+out, and the click failed mute.
 
 ## Layout
 

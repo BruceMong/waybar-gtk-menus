@@ -17,11 +17,22 @@ from menu_common import LayerPopup, run_popup  # noqa: E402
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 REMOTE_SH = os.path.join(CONFIG_DIR, "remote-mode.sh")
-# État de session : $XDG_RUNTIME_DIR est privé à l'utilisateur et vidé à la
-# déconnexion, là où /tmp est partagé entre comptes et survit à la session.
-RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
-REMOTE_FLAG = os.path.join(RUNTIME_DIR, "remote-mode-active")
+# L'unité transitoire qui porte l'inhibiteur du mode remote.
+REMOTE_UNIT = "remote-mode-inhibit.service"
 DEVNULL = subprocess.DEVNULL
+
+
+def remote_is_active():
+    """Le mode remote inhibe-t-il vraiment la veille ?
+
+    On interroge l'unité, et non le fichier témoin de $XDG_RUNTIME_DIR : le
+    2026-09-06, ce témoin a survécu à la mort de l'inhibiteur et l'interrupteur
+    est resté sur « activé » toute une nuit pendant que la machine dormait
+    capot fermé. Un état affiché doit se déduire de ce qui agit.
+    """
+    return subprocess.run(
+        ["systemctl", "--user", "is-active", "--quiet", REMOTE_UNIT],
+        stdout=DEVNULL, stderr=DEVNULL).returncode == 0
 
 
 class PowerPopup(LayerPopup):
@@ -32,7 +43,7 @@ class PowerPopup(LayerPopup):
         session.action("\U000f033e", "Verrouiller", on_click=self._lock)
         self.sw = session.toggle(
             "\ueb2f", "Mode Remote",
-            os.path.exists(REMOTE_FLAG), self._toggle_remote)
+            remote_is_active(), self._toggle_remote)
         session.action("⏾", "Mise en veille",
                        on_click=lambda *_: self._power(["systemctl", "suspend"]))
 

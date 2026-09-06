@@ -37,6 +37,14 @@ META = os.path.join(RUNTIME_DIR, "waybar-updates.meta")
 PACMAN_LOG = "/var/log/pacman.log"
 DEVNULL = subprocess.DEVNULL
 
+# Classe des terminaux ouverts depuis ce menu. Volontairement distincte de
+# « waybar.modules », qu'une windowrule Hyprland force en flottant 300x720
+# centré et épinglé : c'est la bonne forme pour un popup GTK, la mauvaise pour
+# un terminal où l'on suit une mise à jour pendant plusieurs minutes. La règle
+# jumelle (cf. hyprland.lua, « waybar-updates-term ») envoie cette classe-ci
+# sur le bureau 5, en fenêtre tuilée.
+TERM_CLASS = "waybar.updates"
+
 # Session Claude qui mène la mise à jour. `yay -Syu` installe, mais ne dit pas
 # ce qu'il laisse derrière : .pacnew à fusionner, unité qui ne redémarre plus,
 # annonce Arch demandant une intervention. C'est ce travail-là qu'on délègue,
@@ -371,7 +379,7 @@ class UpdatesPopup(LayerPopup):
         # Terminal interactif : yay demande le mot de passe sudo et les
         # confirmations de remplacement de paquets.
         subprocess.Popen(
-            ["kitty", "--class", "waybar.modules", "-T", "Mise à jour du système",
+            ["kitty", "--class", TERM_CLASS, "-T", "Mise à jour du système",
              "bash", "-c",
              "yay -Syu; printf '\\nTerminé — Entrée pour fermer.'; read -r _; "
              "%s --refresh" % UPDATES_SH],
@@ -405,7 +413,7 @@ class UpdatesPopup(LayerPopup):
             shlex.quote(CLAUDE_BIN), shlex.quote(CLAUDE_PROMPT % intro),
             shlex.quote(UPDATES_SH))
         subprocess.Popen(
-            ["kitty", "--class", "waybar.modules", "--directory", cwd,
+            ["kitty", "--class", TERM_CLASS, "--directory", cwd,
              "-T", "Mise à jour par Claude", "bash", "-c", script],
             start_new_session=True, stdout=DEVNULL, stderr=DEVNULL)
         self.close()
