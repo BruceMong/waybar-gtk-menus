@@ -15,7 +15,7 @@
 
    3. TRANSLUCIDITÉ. Le fond est en rgba, pas opaque. Le flou est produit par
       le compositeur, pas par le CSS (GTK3 n'a pas de backdrop-filter) :
-      voir le bloc `layerrule` waybar dans hyprland.conf. Sans cette règle la
+      voir le bloc `layerrule` waybar de la config Hyprland. Sans cette règle la
       barre est simplement semi-transparente, ce qui est laid — les deux
       moitiés vont ensemble.
    ═══════════════════════════════════════════════════════════════════════════ */

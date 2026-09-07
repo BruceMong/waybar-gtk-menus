@@ -571,9 +571,10 @@ def rewrite_bind(bind, mods, key):
     bind["key"] = key
 
 
-# Repli hyprlang conservé depuis la migration Lua du 2026-09-02 : il ne sert
-# qu'un jour où le .lua casse, c'est-à-dire au pire moment pour découvrir qu'il
-# est périmé. Réassigner un raccourci n'y touchait pas, et rien ne le signalait.
+# Repli hyprlang, pour les configurations qui en gardent un à côté du .lua :
+# réassigner un raccourci n'y touchait pas, et rien ne le signalait — le repli
+# devenait faux au pire moment pour le découvrir. Son absence est le cas
+# nominal (ici depuis le 2026-09-07) et ne doit donc rien signaler du tout.
 MIRROR = os.path.join(HYPR_DIR, "hyprland.conf")
 
 # `bind = $mainMod SHIFT, F, fullscreen, 1` — modificateurs séparés par des
@@ -609,12 +610,17 @@ def _expand(mods, variables):
 
 
 def mirror_bind(old_mods, old_key, new_mods, new_key):
-    """Reporte une réassignation dans hyprland.conf. Renvoie le nombre de lignes.
+    """Reporte une réassignation dans hyprland.conf.
 
-    Le dépôt impose que les deux configurations restent en parité : `.lua` est
-    lu par Hyprland, `.conf` est le filet. Une divergence ne se voit pas — d'où
-    ce report automatique, et l'avertissement affiché quand aucune ligne ne
-    correspond (bind ajouté d'un seul côté, forme que le motif ne sait pas
+    Renvoie le nombre de lignes réécrites, ou None s'il n'y a pas de repli —
+    les deux valent 0 ligne écrite, mais pas la même chose : sans repli il n'y
+    a rien à reporter et c'est normal, alors qu'un repli présent que l'on ne
+    sait pas mettre à jour doit être signalé.
+
+    Quand les deux fichiers coexistent, ils doivent rester en parité : `.lua`
+    est lu par Hyprland, `.conf` est le filet. Une divergence ne se voit pas —
+    d'où ce report automatique, et l'avertissement affiché quand aucune ligne
+    ne correspond (bind ajouté d'un seul côté, forme que le motif ne sait pas
     lire : à reporter alors à la main).
 
     Plusieurs lignes peuvent porter la même combinaison — `ALT, Tab` en a deux,
@@ -624,6 +630,8 @@ def mirror_bind(old_mods, old_key, new_mods, new_key):
     try:
         with open(MIRROR, encoding="utf-8") as f:
             lines = f.read().splitlines(keepends=True)
+    except FileNotFoundError:
+        return None
     except OSError:
         return 0
 
@@ -920,7 +928,8 @@ class KeybindsPopup(LayerPopup):
             self._cancel_capture()
             return
 
-        # Le repli hyprlang doit suivre, sinon il devient faux en silence.
+        # Le repli hyprlang, s'il y en a un, doit suivre : sinon il devient
+        # faux en silence. `None` signifie qu'il n'y en a pas — cas nominal.
         mirrored = mirror_bind(old_mods, old_key, mods, key)
 
         row.value_label.get_style_context().remove_class("capturing")
@@ -928,7 +937,7 @@ class KeybindsPopup(LayerPopup):
         self.capturing = None
 
         hypr_reload()
-        if mirrored:
+        if mirrored is None or mirrored:
             self._set_status("%s → %s (rechargé)" % (
                 combo_label(mods, key), action_label(bind)[:40]), "ok")
         else:

@@ -56,7 +56,7 @@ YELLOW = "#ffd60a"
 PURPLE = "#bf5af2"
 
 # ── Matériaux ──────────────────────────────────────────────────────────────
-# Le flou vient du compositeur (blocs `layerrule` de hyprland.conf), jamais du
+# Le flou vient du compositeur (blocs `layerrule` de la config Hyprland), jamais du
 # CSS : GTK3 n'a pas de backdrop-filter. Ces valeurs ne sont que la teinte
 # posée par-dessus.
 WINDOW_BG = "rgba(28, 28, 30, 0.74)"   # popups

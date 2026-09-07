@@ -21,8 +21,8 @@ from menu_common import LayerPopup, run_popup  # noqa: E402
 TEMP_FILE = os.path.expanduser("~/.cache/hyprsunset-temp")
 KBD_DEVICE = "tpacpi::kbd_backlight"
 KITTY_CONF = os.path.expanduser("~/.config/kitty/kitty.conf")
-CHROME_OPACITY_CONF = os.path.expanduser("~/.config/hypr/chrome-opacity.lua")
-PIP_OPACITY_CONF = os.path.expanduser("~/.config/hypr/pip-opacity.lua")
+CHROME_OPACITY_LUA = os.path.expanduser("~/.config/hypr/chrome-opacity.lua")
+PIP_OPACITY_LUA = os.path.expanduser("~/.config/hypr/pip-opacity.lua")
 
 PIP_RULE_TEMPLATE = """\
 -- Opacite PiP — geree par le slider du menu luminosite Waybar.
@@ -242,7 +242,7 @@ class BrightnessPopup(LayerPopup):
         est une chaine entre guillemets : `opacity = "0.86 0.86",`.
         """
         try:
-            with open(PIP_OPACITY_CONF) as f:
+            with open(PIP_OPACITY_LUA) as f:
                 for line in f:
                     s = line.strip()
                     if s.startswith("opacity") and "=" in s:
@@ -265,7 +265,7 @@ class BrightnessPopup(LayerPopup):
         self._pip_opacity_timeout_id = None
         value = f"{percent / 100:.2f}"
         try:
-            with open(PIP_OPACITY_CONF) as f:
+            with open(PIP_OPACITY_LUA) as f:
                 content = f.read()
             new_content, n = re.subn(
                 r"(?m)^([ \t]*opacity\s*)=.*$",
@@ -274,10 +274,10 @@ class BrightnessPopup(LayerPopup):
             )
             if n == 0:
                 new_content = PIP_RULE_TEMPLATE.format(value=value)
-            with open(PIP_OPACITY_CONF, "w") as f:
+            with open(PIP_OPACITY_LUA, "w") as f:
                 f.write(new_content)
         except FileNotFoundError:
-            with open(PIP_OPACITY_CONF, "w") as f:
+            with open(PIP_OPACITY_LUA, "w") as f:
                 f.write(PIP_RULE_TEMPLATE.format(value=value))
         except Exception:
             return False
@@ -296,7 +296,7 @@ class BrightnessPopup(LayerPopup):
         commence jamais par « opacity » : le test reste valable tel quel.
         """
         try:
-            with open(CHROME_OPACITY_CONF) as f:
+            with open(CHROME_OPACITY_LUA) as f:
                 for line in f:
                     s = line.strip()
                     if s.startswith("opacity") and "=" in s:
@@ -308,7 +308,7 @@ class BrightnessPopup(LayerPopup):
     def _on_chrome_toggled(self, switch, _param):
         content = CHROME_RULE_ON if switch.get_active() else CHROME_RULE_OFF
         try:
-            with open(CHROME_OPACITY_CONF, "w") as f:
+            with open(CHROME_OPACITY_LUA, "w") as f:
                 f.write(content)
         except Exception:
             return

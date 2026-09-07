@@ -177,14 +177,15 @@ capturing a new combo**. It rewrites the matching line in your own
 If you keep a `hyprland.conf` alongside the Lua config as a fallback — the
 hyprlang format is deprecated since 0.55 and goes away in 0.57 — the matching
 `bind = …` line is rewritten there too, so the fallback cannot silently drift
-out of date. When no line matches, the menu says so instead of staying quiet:
-that one is yours to port by hand.
+out of date. When the file is there but no line matches, the menu says so
+instead of staying quiet: that one is yours to port by hand. Keeping no
+fallback at all is the normal case and is never reported.
 
-Before writing it saves two backups next to the file:
+Before writing it saves two backups next to each file it touches
+(`hyprland.lua.orig`, and `hyprland.conf.orig` if you keep a fallback):
 
-- `hyprland.conf.orig` — state before the *first* ever modification, never
-  touched again;
-- `hyprland.conf.bak` — state before the *last* modification.
+- `.orig` — state before the *first* ever modification, never touched again;
+- `.bak` — state before the *last* modification.
 
 Writes are atomic (temp file + `rename`). Still: this touches your window
 manager config. If that makes you uncomfortable, drop `custom/keybinds` from
