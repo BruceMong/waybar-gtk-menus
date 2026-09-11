@@ -6,6 +6,15 @@
 # La séparation des canaux est ce qui permet, à la transcription, de savoir
 # qui parle sans diarisation : c'est la raison du `join` plutôt qu'un `amix`.
 #
+# Le micro du portable entend les haut-parleurs : sans traitement, tout ce que
+# disent les autres réapparaît dans le canal micro, une seconde plus tard, et
+# la transcription l'attribue à moi (call du 2026-09-11 : la moitié de mes
+# « tours de parole » étaient l'écho de mon interlocuteur). Pendant l'enregistrement, on
+# charge donc l'annulation d'écho WebRTC de PipeWire : les applications sont
+# basculées sur un sink virtuel qui sert de référence, et le canal micro est
+# pris sur la source corrigée. Tout est remis en place à l'arrêt. Un casque
+# rend ça inutile mais ne le gêne pas.
+#
 # Usage : voice-recorder.sh {start [libellé] | stop | toggle [libellé] | status | dir}
 
 set -u
@@ -14,7 +23,10 @@ DIR="${VOICE_REC_DIR:-$HOME/Recordings/meetings}"
 PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/waybar-voicerec.pid"
 PATHFILE="${XDG_RUNTIME_DIR:-/tmp}/waybar-voicerec.path"
 LOGFILE="${XDG_RUNTIME_DIR:-/tmp}/waybar-voicerec.log"
-BITRATE="48k"
+AECFILE="${XDG_RUNTIME_DIR:-/tmp}/waybar-voicerec.aec"
+# 96 kb/s pour deux voix (48 par canal) : au-dessous, Opus lisse les consonnes
+# et whisper confond les mots courts. Un call de 45 min pèse ~30 Mo.
+BITRATE="96k"
 
 notify() { command -v notify-send >/dev/null && notify-send -a "Enregistreur" "$@"; }
 
@@ -43,6 +55,40 @@ current_pid() {
     esac
 }
 
+# Charge l'annulation d'écho : crée `ec_mic` (micro moins ce qui sort) et
+# `ec_sink` (sink virtuel de référence), bascule le sink par défaut et les flux
+# en cours dessus. Écrit "<module> <sink d'origine>" dans $AECFILE. Renvoie 1
+# si le module refuse de se charger : on enregistre alors comme avant.
+aec_start() {
+    local sink mod id
+    sink=$(pactl get-default-sink 2>/dev/null) || return 1
+    aec_stop >/dev/null 2>&1   # un reste d'enregistrement mal terminé
+    mod=$(pactl load-module module-echo-cancel aec_method=webrtc \
+            source_name=ec_mic sink_name=ec_sink 2>/dev/null) || return 1
+    [[ "$mod" =~ ^[0-9]+$ ]] || return 1
+    printf '%s %s\n' "$mod" "$sink" > "$AECFILE"
+    pactl set-default-sink ec_sink 2>/dev/null
+    for id in $(pactl list short sink-inputs 2>/dev/null | cut -f1); do
+        pactl move-sink-input "$id" ec_sink 2>/dev/null
+    done
+    return 0
+}
+
+# Remet le sink d'origine, y ramène les flux, décharge le module.
+aec_stop() {
+    local mod sink id
+    read -r mod sink < "$AECFILE" 2>/dev/null || return 0
+    rm -f "$AECFILE"
+    if [ -n "$sink" ]; then
+        pactl set-default-sink "$sink" 2>/dev/null
+        for id in $(pactl list short sink-inputs 2>/dev/null | cut -f1); do
+            pactl move-sink-input "$id" "$sink" 2>/dev/null
+        done
+    fi
+    [ -n "$mod" ] && pactl unload-module "$mod" 2>/dev/null
+    return 0
+}
+
 start() {
     if current_pid >/dev/null; then
         notify "Enregistrement déjà en cours"
@@ -60,6 +106,13 @@ start() {
     case "$mic" in *.monitor) monitor="" ;; esac
     [ -n "$monitor" ] && ! pactl list short sources 2>/dev/null \
         | awk '{print $2}' | grep -qx "$monitor" && monitor=""
+
+    # Avec l'annulation d'écho : le micro corrigé à gauche, ce que les
+    # applications jouent (le sink de référence) à droite.
+    local aec=""
+    if [ -n "$monitor" ] && aec_start; then
+        mic="ec_mic"; monitor="ec_sink.monitor"; aec=" + anti-écho"
+    fi
 
     mkdir -p "$DIR" || return 1
     stamp=$(date +%Y-%m-%d_%H-%M)
@@ -87,13 +140,13 @@ start() {
 "[0:a]aresample=async=1:first_pts=0,aformat=channel_layouts=mono[mic];\
 [1:a]aresample=async=1:first_pts=0,aformat=channel_layouts=mono[sys];\
 [mic][sys]join=inputs=2:channel_layout=stereo[out]" \
-            -map "[out]" -c:a libopus -b:a "$BITRATE" -vbr on \
+            -map "[out]" -c:a libopus -b:a "$BITRATE" -vbr on -application voip \
             "$file" >/dev/null 2>"$LOGFILE" &
     else
         nohup ffmpeg -nostdin -hide_banner -loglevel error -y \
             -f pulse -i "$mic" \
             -af "aresample=async=1:first_pts=0,aformat=channel_layouts=mono" \
-            -c:a libopus -b:a "$BITRATE" -vbr on \
+            -c:a libopus -b:a "$BITRATE" -vbr on -application voip \
             "$file" >/dev/null 2>"$LOGFILE" &
     fi
     pid=$!
@@ -104,6 +157,7 @@ start() {
     # qu'il vit encore avant d'annoncer un enregistrement en cours.
     sleep 0.6
     if ! kill -0 "$pid" 2>/dev/null; then
+        aec_stop
         notify -u critical "Échec du démarrage" "$(tail -3 "$LOGFILE" 2>/dev/null)"
         return 1
     fi
@@ -112,7 +166,7 @@ start() {
     printf '%s\n' "$file" > "$PATHFILE"
     wake_watcher
     notify "Enregistrement démarré" \
-        "$(basename "$file")$([ -n "$monitor" ] && echo ' — micro + sortie audio')"
+        "$(basename "$file")$([ -n "$monitor" ] && echo " — micro + sortie audio$aec")"
 }
 
 stop() {
@@ -128,6 +182,7 @@ stop() {
     done
     [ -d "/proc/$pid" ] && kill -TERM "$pid" 2>/dev/null
     rm -f "$PIDFILE" "$PATHFILE"
+    aec_stop
     wake_watcher
     if [ -n "$file" ] && [ -f "$file" ]; then
         notify "Enregistrement terminé" "$(basename "$file") — $(du -h "$file" | cut -f1)"

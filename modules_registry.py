@@ -108,10 +108,11 @@ MODULES = [
            _script("sound-menu.py")),
     Module(["backlight"], "\U000f00e0", "Luminosité",
            _script("brightness-menu.py")),
-    Module(["idle_inhibitor"], "\U000f0176", "Caféine",
-           _script("caffeine-toggle.sh")),
-    Module(["power-profiles-daemon"], "\U000f0241", "Profil énergie",
-           "powerprofilesctl set balanced"),
+    # transient : l'icône n'est dans la barre que quand la caféine est active
+    # (caffeine-status.sh). Depuis le ⋮, l'action bascule — c'est le seul
+    # chemin à la souris pour l'ALLUMER hors du menu batterie.
+    Module(["custom/caffeine"], "\U000f0176", "Caféine",
+           _script("caffeine-toggle.sh"), transient=True),
     Module(["battery"], "\U000f0079", "Batterie", _script("battery-menu.py")),
     Module(["custom/power"], "\U000f0425", "Power", _script("power-menu.py")),
 

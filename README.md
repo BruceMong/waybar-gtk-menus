@@ -123,6 +123,7 @@ surfaces, so the cost is limited to the bar and the popups.
 | network | `nmcli` (NetworkManager), optionally `nm-connection-editor`, `nmtui` |
 | audio | `wpctl` (WirePlumber), `pactl` |
 | brightness | `brightnessctl`, `hyprsunset` (night light), `hypridle` |
+| battery | `powerprofilesctl` (power-profiles-daemon), `hypridle` (idle delays), `systemd-inhibit` for caffeine — a transient user unit holding a logind idle inhibitor, so hypridle stays alive and still locks before suspend. The `custom/caffeine` icon only shows while caffeine is on; the switch to turn it on lives in the battery popup |
 | notifications / dnd | `swaync` |
 | updates | `checkupdates` (pacman-contrib), `yay` for AUR counts. With `claude` (Claude Code) on the PATH the popup grows a *supervised* run: a Claude session that upgrades the system itself, then reports on what the upgrade left behind — `.pacnew` files, failed units, orphans, Arch news — and syncs the config repo pointed at by `CONFIG_REPO` in `updates-menu.py`. It needs passwordless `sudo`; without it `yay` stalls on a password prompt the session has no terminal to answer |
 | media | `playerctl`, Waybar's `mpris` module — title while playing, greyed while paused, nothing when stopped. Left click opens `media-menu.py` (track, prev / play-pause / next, plus a player picker when several are running); scroll skips tracks, middle click goes back, right click toggles Chrome PiP (`wtype`, `jq`, and the bundled `pip-extension/` bound to Alt+Shift+P) |

@@ -87,7 +87,7 @@ window#waybar {
 #battery,
 #backlight,
 #mpris,
-#idle_inhibitor,
+#custom-caffeine,
 #privacy,
 #tray,
 #systray,
@@ -105,7 +105,6 @@ window#waybar {
 #custom-voice-rec,
 #custom-updates,
 #custom-ws-tens,
-#power-profiles-daemon,
 #systemd-failed-units {
     background-color: transparent;
     color: @ink;
@@ -195,9 +194,8 @@ window#waybar {
 #custom-voice-rec:hover,
 #custom-updates:hover,
 #custom-ws-tens:hover,
-#power-profiles-daemon:hover,
 #systemd-failed-units:hover,
-#idle_inhibitor:hover {
+#custom-caffeine:hover {
     background-color: @fill;
     color: @ink;
 }
@@ -223,9 +221,8 @@ window#waybar {
 #custom-voice-rec:active,
 #custom-updates:active,
 #custom-ws-tens:active,
-#power-profiles-daemon:active,
 #systemd-failed-units:active,
-#idle_inhibitor:active,
+#custom-caffeine:active,
 #workspaces button:active {
     background-color: @fillHard;
     color: @ink;
@@ -435,8 +432,7 @@ window#waybar {
 #custom-keybinds,
 #backlight,
 #battery,
-#idle_inhibitor,
-#power-profiles-daemon,
+#custom-caffeine,
 #custom-chrome,
 #custom-power {
     font-size: 14px;
@@ -547,7 +543,19 @@ window#waybar {
     color: @ink3;
 }
 
+/* Material Symbols en tête, et non en quatrième position comme dans la pile
+   globale : Inter (et Adwaita Sans, qui en dérive) occupent la même zone
+   privée pour leurs glyphes internes, et les quatre icônes de volume tombent
+   dessus — U+E050 (volume_up) y est `l.ss02`, un « l » à queue, U+E04F
+   (volume_off) un « j » barré. Pango prend le premier fichier qui possède le
+   codepoint, donc la barre affichait un « l » à la place du haut-parleur.
+   Les autres glyphes Material de la barre ne sont pas touchés : Inter ne
+   couvre que 744 codepoints épars de la zone, et wifi, batterie ou
+   luminosité n'en font pas partie. Avant de choisir un nouveau glyphe :
+   `fc-list ':charset=<hex>' family | grep -c Inter` doit rendre 0. */
 #pulseaudio.icon {
+    font-family: "Material Symbols Rounded", "JetBrainsMono Nerd Font Propo",
+                 "Symbols Nerd Font";
     padding: 0 3px 0 8px;
 }
 
@@ -576,12 +584,9 @@ window#waybar {
     color: @ink3;
 }
 
-/* ── Caféine : au repos éteint, actif en encre pleine ── */
-#idle_inhibitor {
-    color: @ink3;
-}
-
-#idle_inhibitor.activated {
+/* ── Caféine : masquée au repos (texte vide), encre pleine quand elle est
+      active — c'est un rappel, pas un bouton : on l'a laissée allumée. ── */
+#custom-caffeine {
     color: @ink;
 }
 
@@ -594,15 +599,6 @@ window#waybar {
 #privacy-item.audio-in {
     color: @sysRed;
     padding: 0 3px;
-}
-
-/* ── Profil énergie : seul l'écart au profil équilibré se signale ── */
-#power-profiles-daemon.performance {
-    color: @sysOrange;
-}
-
-#power-profiles-daemon.power-saver {
-    color: @ink2;
 }
 
 /* ── Poignée du tray : discrète, se révèle au survol du groupe ── */

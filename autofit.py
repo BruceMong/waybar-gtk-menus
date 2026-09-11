@@ -85,7 +85,7 @@ ZONES = ("modules-left", "modules-center", "modules-right")
 ICON_CELL = {
     "cpu", "network", "pulseaudio#icon", "custom/tray-handle",
     "custom/toggle-info", "custom/keybinds", "backlight", "battery",
-    "idle_inhibitor", "power-profiles-daemon", "custom/chrome",
+    "custom/caffeine", "custom/chrome",
     "custom/power",
 }
 
@@ -117,8 +117,6 @@ SPECS = {
     "pulseaudio#icon":         ("\U000f057e", PAD_ICON, 14),
     "pulseaudio#percentage":   ("100%", 11, 13),
     "backlight":               ("\U000f00e0", PAD_MODULE, 14),
-    "idle_inhibitor":          ("\U000f0fba", PAD_MODULE, 14),
-    "power-profiles-daemon":   ("\U000f0442", PAD_MODULE, 14),
     "battery":                 ("\U000f0082", PAD_MODULE, 14),
     "custom/power":            ("\U000f0425", PAD_MODULE, 14),
     "privacy":                 ("", PAD_MODULE, 13),
@@ -331,6 +329,13 @@ def recorder_width():
     return measure_text("\U000f0567 00:00", 13) + PAD_MODULE
 
 
+def caffeine_width():
+    """Caféine active : sinon caffeine-status.sh n'émet rien, même logique."""
+    if run(["systemctl", "--user", "is-active", "caffeine"]) != "active":
+        return 0
+    return max(measure_text("\ueb44", 14), MIN_ICON) + PAD_MODULE
+
+
 # Les deux moitiés de l'horloge vivent dans group/datetime : 7px de padding
 # côté extérieur, 2px côté intérieur (style-normal.css), et un plancher de
 # min-width que la mesure du texte ne doit pas passer sous silence.
@@ -381,6 +386,7 @@ DYNAMIC = {
     "privacy": privacy_width,
     "custom/voice-rec": voice_rec_width,
     "custom/recorder": recorder_width,
+    "custom/caffeine": caffeine_width,
 }
 
 

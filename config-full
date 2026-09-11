@@ -7,7 +7,7 @@
 
     "modules-left": ["ext/workspaces", "custom/ws-tens", "hyprland/window", "custom/chrome", "mpris"],
     "modules-center": [],
-    "modules-right": ["custom/voice-rec", "custom/recorder", "privacy", "group/systray", "group/tools", "group/status", "group/system", "group/connect", "pulseaudio#mic", "group/audio", "backlight", "idle_inhibitor", "power-profiles-daemon", "battery", "group/datetime", "custom/power"],
+    "modules-right": ["custom/voice-rec", "custom/recorder", "privacy", "group/systray", "group/tools", "group/status", "group/system", "group/connect", "pulseaudio#mic", "group/audio", "backlight", "custom/caffeine", "battery", "group/datetime", "custom/power"],
 
     "defaults": {
         "clock": {
@@ -197,25 +197,13 @@
         ]
     },
 
-    "power-profiles-daemon": {
-        "format": "{icon}",
-        "format-icons": {
-            "default": "",
-            "performance": "",
-            "balanced": "",
-            "power-saver": ""
-        },
-        "tooltip-format": "Profil énergie : {profile}\nclic : basculer (perf / équilibré / éco)"
-    },
-
-    "idle_inhibitor": {
-        "format": "{icon}",
-        "format-icons": {
-            "activated": "",
-            "deactivated": ""
-        },
-        "tooltip-format-activated": "Caféine ACTIVE : veille et verrouillage bloqués",
-        "tooltip-format-deactivated": "Caféine inactive — clic pour bloquer la veille"
+    "custom/caffeine": {
+        "format": "{}",
+        "return-type": "json",
+        "exec": "$HOME/.config/waybar/caffeine-status.sh",
+        "interval": 60,
+        "signal": 15,
+        "on-click": "~/.config/waybar/caffeine-toggle.sh off"
     },
 
     "cpu": {

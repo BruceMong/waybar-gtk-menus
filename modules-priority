@@ -14,15 +14,13 @@
 # drawer group/audio, donc le cacher ne libere aucune place (cf. note
 # ci-dessus), et c'est lui qui porte le on-click du menu son.
 backlight
-power-profiles-daemon
 clock#date
-# mpris : sacrifié après les trois icônes ci-dessus, pas avant. En tête de
+# mpris : sacrifié après les deux icônes ci-dessus, pas avant. En tête de
 # liste il était replié dès qu'un lecteur s'ouvrait — c'est-à-dire toujours —
-# et la barre n'a jamais montré ce qui jouait. Les trois modules qui passent
+# et la barre n'a jamais montré ce qui jouait. Les deux modules qui passent
 # devant lui restent atteignables en un clic par le menu « ⋮ ».
 mpris
 custom/chrome
-idle_inhibitor
 cpu temperature memory disk
 # Le nom de l'application est l'ancre de la menu bar (avec la pomme et
 # l'heure) : il ne se replie qu'en tout dernier recours.

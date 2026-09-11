@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Popup Batterie & Énergie pour Waybar (style menu luminosité).
 
-Profil énergétique (power-profiles-daemon) + délais hypridle :
-verrouillage, extinction écran, mise en veille. Application immédiate.
+Profil énergétique (power-profiles-daemon), caféine (caffeine.service) et
+délais hypridle : verrouillage, extinction écran, mise en veille. Application
+immédiate. Le profil et la caféine n'ont plus de module dans la barre : ce
+menu est leur seule interface à la souris.
 """
 import os
 import re
@@ -140,6 +142,7 @@ class BatteryPopup(LayerPopup):
     """
 
     IC_PROFILE = "\U000f04c5"   # compteur de vitesse
+    IC_CAFFEINE = "\U000f0176"  # tasse
     IC_LOCK = "\U000f033e"      # cadenas
     IC_SCREEN = "\U000f0379"    # écran
     IC_SLEEP = "\U000f0904"     # veille
@@ -179,6 +182,12 @@ class BatteryPopup(LayerPopup):
         # L'ordre des lignes est celui des événements, et il est contraint :
         # cf. _enforce_order.
         idle = self.add_card("Après inactivité")
+        # Caféine en tête : c'est l'interrupteur qui suspend les trois délais
+        # du dessous. L'icône de la barre ne s'affiche que quand elle est
+        # active ; ici est le seul endroit où on l'allume à la souris.
+        idle.toggle(self.IC_CAFFEINE, "Caféine", self._caffeine_active(),
+                    self._on_caffeine_toggled,
+                    subtitle="bloque verrouillage, extinction et veille")
         self.lbl_lock = self._add_delay(idle, self.IC_LOCK,
                                         "Verrouillage", LOCK)
         self.lbl_dpms = self._add_delay(idle, self.IC_SCREEN,
@@ -318,6 +327,24 @@ class BatteryPopup(LayerPopup):
         self._set_profile_label(idx)
 
     # ---- Délais ----
+
+    # ---- Caféine ----
+
+    @staticmethod
+    def _caffeine_active():
+        return subprocess.run(
+            ["systemctl", "--user", "-q", "is-active", "caffeine"],
+            check=False).returncode == 0
+
+    @staticmethod
+    def _on_caffeine_toggled(switch, _pspec):
+        # caffeine-toggle.sh porte la notification et le rafraîchissement de
+        # l'icône de la barre ; on lui passe l'état voulu, pas une bascule,
+        # pour que l'interrupteur et l'unité ne se croisent jamais.
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "caffeine-toggle.sh")
+        subprocess.Popen([script, "on" if switch.get_active() else "off"],
+                         stdout=DEVNULL, stderr=DEVNULL)
 
     def _add_delay(self, card, icon, title, marker):
         scale = Gtk.Scale.new_with_range(
