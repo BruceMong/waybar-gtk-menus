@@ -2,7 +2,8 @@
 """Popup Notifications pour Waybar (style menu luminosité).
 
 Réglages de notification : Ne pas déranger (switch + minuteries 30 min / 1 h),
-son des notifications, effet « Notif Claude → fenêtre ».
+son des notifications, notifications discrètes (moins larges), notifications
+de Claude Code.
 
 La pile elle-même vit dans le centre swaync : ce popup ne fait que les
 réglages, et se contente d'y mener par sa dernière carte.
@@ -17,8 +18,17 @@ from menu_common import LayerPopup, run_popup
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 DND_TOGGLE = os.path.join(CONFIG_DIR, "dnd-toggle.sh")
+# Lu par les hooks Notification et Stop de Claude Code (~/.claude/hooks) : tant
+# qu'il existe, aucun des deux n'envoie de notification. Le suivi du module
+# custom/claude, lui, continue.
 CLAUDE_FLAG = os.path.join(CONFIG_DIR, "claude-notify-focus.disabled")
+# Mascotte posée à côté des hooks — la même que sur leurs notifications.
+CLAUDE_ICON = os.path.expanduser("~/.claude/hooks/clawd.png")
 SOUND_FLAG = os.path.join(CONFIG_DIR, "notif-sound.enabled")
+# Largeur des notifications flottantes : le drapeau est lu par notif-compact.sh,
+# qui régénère la config swaync et la fait recharger.
+COMPACT_FLAG = os.path.join(CONFIG_DIR, "notif-compact.enabled")
+COMPACT_TOGGLE = os.path.join(CONFIG_DIR, "notif-compact.sh")
 # État de session : $XDG_RUNTIME_DIR est privé à l'utilisateur et vidé à la
 # déconnexion, là où /tmp est partagé entre comptes et survit à la session.
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
@@ -38,6 +48,7 @@ class NotificationPopup(LayerPopup):
     IC_DND = "\U000f009b"      # cloche barrée
     IC_TIMER = "\U000f051b"    # minuteur
     IC_SOUND = "\U000f057e"    # haut-parleur
+    IC_COMPACT = "\U000f084c"  # flèches qui se resserrent
     IC_CLAUDE = "\U000f09d1"   # cerveau
     IC_CENTER = "\U000f009a"   # cloche
     IC_CLEAR = "\U000f01b4"    # balai
@@ -58,9 +69,15 @@ class NotificationPopup(LayerPopup):
         prefs = self.add_card("Réglages")
         prefs.toggle(self.IC_SOUND, "Son des notifications",
                      os.path.exists(SOUND_FLAG), self._on_sound_toggled)
-        # Actif tant que le drapeau « disabled » est absent.
-        prefs.toggle(self.IC_CLAUDE, "Notif Claude → fenêtre",
-                     not os.path.exists(CLAUDE_FLAG), self._on_claude_toggled)
+        prefs.toggle(self.IC_COMPACT, "Notifications discrètes",
+                     os.path.exists(COMPACT_FLAG), self._on_compact_toggled,
+                     subtitle="cartes moins larges")
+        # Actif tant que le drapeau « disabled » est absent. L'ancien libellé
+        # « Notif Claude → fenêtre » laissait croire qu'il ne réglait que le
+        # clic vers la fenêtre, alors qu'il coupe les notifications elles-mêmes.
+        prefs.toggle(self.IC_CLAUDE, "Notifications Claude Code",
+                     not os.path.exists(CLAUDE_FLAG), self._on_claude_toggled,
+                     subtitle="en attente, tâche terminée")
 
         # La pile elle-même vit dans swaync. Le clic gauche sur la cloche y
         # mène déjà, mais ce popup s'ouvre au clic DROIT : sans ces deux
@@ -136,6 +153,15 @@ class NotificationPopup(LayerPopup):
         subprocess.Popen([os.path.join(CONFIG_DIR, "notification-refresh.sh")],
                          stdout=DEVNULL, stderr=DEVNULL)
 
+    def _on_compact_toggled(self, switch, _param):
+        # Le script pose ou retire lui-même le drapeau et recharge swaync ;
+        # la notification part APRÈS, pour s'afficher déjà à la nouvelle
+        # largeur — c'est elle qui montre le résultat du réglage.
+        subprocess.run([COMPACT_TOGGLE, "on" if switch.get_active() else "off"],
+                       stdout=DEVNULL, stderr=DEVNULL)
+        subprocess.Popen(["notify-send", "-a", "swaync", "Notifications discrètes",
+                          "Activées" if switch.get_active() else "Désactivées"])
+
     def _on_claude_toggled(self, switch, _param):
         # actif (switch on) = drapeau "disabled" absent
         if switch.get_active():
@@ -147,8 +173,8 @@ class NotificationPopup(LayerPopup):
         else:
             open(CLAUDE_FLAG, "a").close()
             msg = "Désactivé"
-        subprocess.Popen(["notify-send", "-a", "Claude Code",
-                          "Notif Claude → fenêtre", msg])
+        subprocess.Popen(["notify-send", "-a", "Claude Code", "-i", CLAUDE_ICON,
+                          "Notifications Claude Code", msg])
         subprocess.Popen([os.path.join(CONFIG_DIR, "notification-refresh.sh")],
                          stdout=DEVNULL, stderr=DEVNULL)
 

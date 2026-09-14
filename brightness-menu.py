@@ -36,18 +36,19 @@ hl.window_rule({{
 """
 
 CHROME_RULE_ON = """\
--- Transparence Chrome — gere par le menu luminosite Waybar (switch on/off).
+-- Transparence navigateur (Chrome, Zen) — geree par le menu luminosite Waybar.
 -- Etat : ACTIF
 hl.window_rule({
     name  = "chrome-opacity",
-    match = { class = "google-chrome" },
+    -- Match entier : « google-chrome » seul laisserait Zen opaque.
+    match = { class = "^(google-chrome|zen)$" },
 
     opacity = "0.95 0.90",
 })
 """
 
 CHROME_RULE_OFF = """\
--- Transparence Chrome — gere par le menu luminosite Waybar (switch on/off).
+-- Transparence navigateur (Chrome, Zen) — geree par le menu luminosite Waybar.
 -- Etat : INACTIF
 """
 
@@ -140,7 +141,7 @@ class BrightnessPopup(LayerPopup):
             IC_PIP, "Picture-in-picture", self.scale_pip, "%d %%" % pip)
         self.scale_pip.connect("value-changed", self._on_pip_opacity_changed)
 
-        self.switch_chrome = transp.toggle(IC_CHROME, "Chrome",
+        self.switch_chrome = transp.toggle(IC_CHROME, "Navigateur",
                                            self._is_chrome_transparent(),
                                            self._on_chrome_toggled)
 

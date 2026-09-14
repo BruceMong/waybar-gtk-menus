@@ -13,6 +13,11 @@
 #
 # `addr` est l'adresse de la fenêtre Hyprland du terminal : elle permet au
 # menu Waybar de sauter directement sur la bonne session.
+#
+# `herdr_pane` : sous herdr (multiplexeur), le pty appartient au serveur
+# herdr et non à une fenêtre — `addr` reste vide, mais HERDR_PANE_ID est dans
+# l'environnement de Claude. C'est lui que le menu emploie alors pour sauter
+# sur le pane, y écrire une réponse, ou le refermer. Vide hors herdr.
 
 CS_DIR="${XDG_RUNTIME_DIR:-/tmp}/claude-sessions"
 
@@ -71,9 +76,11 @@ cs_write() {
     local tmp="$CS_DIR/.$sid.tmp"
     jq -n --arg sid "$sid" --arg pid "$CS_PID" --arg dir "$dir" \
           --arg cwd "$cwd" --arg status "$status" --arg addr "$CS_ADDR" \
+          --arg pane "${HERDR_PANE_ID:-}" \
           --arg msg "$msg" --arg ts "$(date +%s)" \
         '{session_id:$sid, pid:($pid|tonumber?), dir:$dir, cwd:$cwd,
-          status:$status, addr:$addr, msg:$msg, ts:($ts|tonumber?)}' \
+          status:$status, addr:$addr, herdr_pane:$pane, msg:$msg,
+          ts:($ts|tonumber?)}' \
         > "$tmp" 2>/dev/null && mv -f "$tmp" "$CS_DIR/$sid.json" 2>/dev/null
 
     cs_prune_stale "$sid"

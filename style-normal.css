@@ -97,6 +97,7 @@ window#waybar {
 #audio,
 #datetime,
 #custom-chrome,
+#custom-zen,
 #custom-calendar,
 #custom-claude,
 #custom-dnd,
@@ -187,6 +188,7 @@ window#waybar {
 #connect:hover,
 #audio:hover,
 #custom-chrome:hover,
+#custom-zen:hover,
 #custom-claude:hover,
 #custom-dnd:hover,
 #custom-power:hover,
@@ -215,6 +217,7 @@ window#waybar {
 #connect:active,
 #audio:active,
 #custom-chrome:active,
+#custom-zen:active,
 #custom-claude:active,
 #custom-dnd:active,
 #custom-recorder:active,
@@ -434,6 +437,7 @@ window#waybar {
 #battery,
 #custom-caffeine,
 #custom-chrome,
+#custom-zen,
 #custom-power {
     font-size: 14px;
     font-weight: 500;

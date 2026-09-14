@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
-# Bascule une vidéo Chrome en Picture-in-Picture.
+# Bascule une vidéo du navigateur en Picture-in-Picture — Chrome ou Zen/Firefox.
 #
 #   mpris-pip.sh              « sors ce que je regarde »  (clic droit du module)
 #   mpris-pip.sh --playing    « sors ce qui joue »        (media-menu.py)
+#
+# Deux navigateurs, deux canaux :
+#   - Chrome n'a pas de raccourci PiP natif : il faut l'extension du dépôt et
+#     son raccourci Alt+Shift+P (prérequis ci-dessous).
+#   - Zen/Firefox a le sien, Ctrl+Shift+] (« key_togglePictureInPicture »),
+#     qui vise la vidéo de l'onglet actif — la dernière touchée, sinon la plus
+#     grande. Rien à installer. Il passe très bien par wtype sur AZERTY, bien
+#     que « ] » y demande AltGr : wtype envoie le keysym, pas la touche.
+#     Une vidéo laissée en arrière-plan n'est pas atteignable de l'extérieur,
+#     mais Firefox la sort tout seul au changement d'onglet quand la pref
+#     media.videocontrols.picture-in-picture.enable-when-switching-tabs.enabled
+#     est posée — c'est le cas sur le profil Zen.
 #
 # Prérequis (une seule fois, côté Chrome) :
 #   1. chrome://extensions → mode développeur → « Charger l'extension non
@@ -44,6 +56,9 @@
 #              prenait une fenêtre au hasard parmi les deux ouvertes.
 
 CHROME_CLASS='google-chrome'
+# Zen expose la classe « zen », Firefox « firefox ». Les deux parlent le même
+# raccourci.
+GECKO_CLASSES='["zen","firefox"]'
 
 # Marques de direction que YouTube enrobe autour des noms de chaîne : elles
 # sont dans le titre de la fenêtre mais pas dans celui de MPRIS, et feraient
@@ -68,43 +83,60 @@ if jq -e 'any(.[]; .title | test("picture.in.picture"; "i"))' >/dev/null <<<"$cl
     exit 0
 fi
 
+# Classes de fenêtre candidates. Sans argument, les deux navigateurs sont en
+# lice et c'est le focus qui tranche ; en mode --playing on restreint à la
+# famille du lecteur MPRIS, sans quoi « sors ce qui joue » dans Zen viserait
+# une fenêtre Chrome plus récemment touchée.
+all_classes() { jq -cn --arg c "$CHROME_CLASS" --argjson g "$GECKO_CLASSES" '$g + [$c]'; }
+
 # `min_by(.focusHistoryID)` = la fenêtre la plus récemment focalisée.
 pick_focused() {
-    jq -r --arg cls "$CHROME_CLASS" '
-        [ .[] | select(.class == $cls) ]
+    jq -r --argjson cls "$1" '
+        [ .[] | select(.class as $c | $cls | index($c)) ]
         | if length == 0 then empty else (min_by(.focusHistoryID) | .address) end
     ' <<<"$clients"
 }
 
 pick_by_title() {
-    jq -r --arg cls "$CHROME_CLASS" --arg want "$1" --arg bidi "$BIDI" '
+    jq -r --argjson cls "$1" --arg want "$2" --arg bidi "$BIDI" '
         def clean: gsub($bidi; "");
-        [ .[] | select(.class == $cls)
+        [ .[] | select(.class as $c | $cls | index($c))
               | select((.title | clean) | contains($want | clean)) ]
         | if length == 0 then empty else (min_by(.focusHistoryID) | .address) end
     ' <<<"$clients"
 }
 
 if [ "$mode" = "playing" ]; then
-    player=$(playerctl -l 2>/dev/null | grep -m1 -E '^(chromium|chrome)')
+    # Zen se déclare « firefox » sur MPRIS : c'est le nom du moteur, pas de
+    # l'application. Chrome se déclare « chromium ».
+    player=$(playerctl -l 2>/dev/null | grep -m1 -E '^(chromium|chrome|firefox|zen)')
     title=""
     [ -n "$player" ] && title=$(playerctl -p "$player" metadata --format '{{title}}' 2>/dev/null)
 
+    case "$player" in
+        firefox*|zen*) classes=$GECKO_CLASSES ;;
+        chrom*)        classes="[\"$CHROME_CLASS\"]" ;;
+        *)             classes=$(all_classes) ;;
+    esac
+
     if [ -z "$title" ]; then
-        target=$(pick_focused)          # rien sur MPRIS : au moins viser l'écran
+        target=$(pick_focused "$classes")   # rien sur MPRIS : au moins viser l'écran
     else
         # Aucune fenêtre ne porte ce titre : l'onglet qui joue est en
-        # arrière-plan. On vise la fenêtre la plus récente et l'extension ira
-        # chercher l'onglet — c'est exactement ce pour quoi elle existe.
-        target=$(pick_by_title "$title")
-        [ -n "$target" ] || target=$(pick_focused)
+        # arrière-plan. On vise la fenêtre la plus récente ; côté Chrome
+        # l'extension ira chercher l'onglet — c'est exactement ce pour quoi
+        # elle existe. Côté Zen, l'auto-PiP l'a normalement déjà sorti.
+        target=$(pick_by_title "$classes" "$title")
+        [ -n "$target" ] || target=$(pick_focused "$classes")
     fi
 else
-    target=$(pick_focused)
+    target=$(pick_focused "$(all_classes)")
 fi
 
-# Chrome n'est pas ouvert, ou aucune de ses fenêtres n'est joignable.
+# Aucun navigateur ouvert, ou aucune de ses fenêtres n'est joignable.
 [ -n "$target" ] || exit 0
+
+target_class=$(jq -r --arg a "$target" '.[] | select(.address == $a) | .class' <<<"$clients")
 
 # Mémorise la fenêtre actuellement au premier plan pour y revenir ensuite.
 prev=$(hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty')
@@ -112,9 +144,15 @@ prev=$(hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty')
 hyprctl dispatch "hl.dsp.focus({ window = \"address:$target\" })" >/dev/null 2>&1 || exit 0
 sleep "$FOCUS_DELAY"
 
-# Raccourci de l'extension du dépôt (Alt+Shift+P). Au-delà, c'est elle qui
-# choisit l'onglet, et qui notifie si aucun n'a de vidéo.
-wtype -M alt -M shift -k p -m shift -m alt
+if [ "$target_class" = "$CHROME_CLASS" ]; then
+    # Raccourci de l'extension du dépôt (Alt+Shift+P). Au-delà, c'est elle qui
+    # choisit l'onglet, et qui notifie si aucun n'a de vidéo.
+    wtype -M alt -M shift -k p -m shift -m alt
+else
+    # Raccourci natif de Firefox. C'est une bascule, comme côté Chrome — d'où
+    # la sortie anticipée plus haut quand un PiP est déjà ouvert.
+    wtype -M ctrl -M shift -k bracketright -m shift -m ctrl
+fi
 
 # Revient à la fenêtre d'origine si ce n'était pas celle-là (PiP reste flottant).
 if [ -n "$prev" ] && [ "$prev" != "$target" ]; then

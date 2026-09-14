@@ -28,10 +28,12 @@ fi
 active="$(hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty')"
 [ -n "$addr" ] && [ "$addr" = "$active" ] && exit 0
 
-export CNF_DIR="$dir" CNF_ADDR="$addr"
+# Mascotte en PNG : swaync n'ouvre pas un SVG donné par chemin.
+icon="${BASH_SOURCE[0]%/*}/clawd.png"
+export CNF_ICON="$icon" CNF_DIR="$dir" CNF_ADDR="$addr"
 if [ -n "$addr" ]; then
     setsid -f bash -c '
-        action=$(notify-send -a "Claude Code" -u low -t 8000 \
+        action=$(notify-send -a "Claude Code" -i "$CNF_ICON" -u low -t 8000 \
             -A "default=Aller à la fenêtre" \
             "Claude Code — $CNF_DIR" "Tâche terminée")
         if [ "$action" = "default" ]; then
@@ -39,7 +41,7 @@ if [ -n "$addr" ]; then
         fi
     ' >/dev/null 2>&1
 else
-    notify-send -a "Claude Code" -u low "Claude Code — $CNF_DIR" "Tâche terminée"
+    notify-send -a "Claude Code" -i "$icon" -u low "Claude Code — $CNF_DIR" "Tâche terminée"
 fi
 
 exit 0

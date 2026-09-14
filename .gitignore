@@ -5,6 +5,7 @@ __pycache__/
 # État posé à l'exécution, propre à la machine
 modules-hidden-auto
 notif-sound.enabled
+notif-compact.enabled
 claude-notify-focus.disabled
 clock-12h
 

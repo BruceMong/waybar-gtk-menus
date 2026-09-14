@@ -13,6 +13,7 @@ faudra redémarrer. Ce menu classe les paquets en trois familles lisibles :
 Les paquets AUR sont comptés à part : ils se recompilent, donc plus lents.
 """
 import hashlib
+import json
 import os
 import shlex
 import shutil
@@ -37,7 +38,7 @@ META = os.path.join(RUNTIME_DIR, "waybar-updates.meta")
 PACMAN_LOG = "/var/log/pacman.log"
 DEVNULL = subprocess.DEVNULL
 
-# Classe des terminaux ouverts depuis ce menu. Volontairement distincte de
+# Classe du terminal « Tout mettre à jour » (et du repli sans herdr). Volontairement distincte de
 # « waybar.modules », qu'une windowrule Hyprland force en flottant 300x720
 # centré et épinglé : c'est la bonne forme pour un popup GTK, la mauvaise pour
 # un terminal où l'on suit une mise à jour pendant plusieurs minutes. La règle
@@ -53,6 +54,18 @@ CLAUDE_BIN = shutil.which("claude")
 # Dépôt de config à resynchroniser ensuite. Absent : la session s'en tient au
 # système, et l'étape 3 du prompt tombe d'elle-même.
 CONFIG_REPO = os.path.expanduser("~/projects/arch-config")
+
+# Depuis le 2026-09-14 les Claude vivent dans herdr (un seul Kitty, bureau 1,
+# un workspace par projet). La session de mise à jour y prend donc un onglet
+# dans le workspace du dépôt de config, comme SUPER+N le ferait — cf.
+# hypr/scripts/herdr-claude.sh, dont on reprend la classe et le repli. Si le
+# serveur herdr ne répond pas, on retombe sur le Kitty nu d'avant.
+HERDR_CLASS = "cl-b1-herdr"
+HERDR_KITTY_CONF = os.path.expanduser("~/.config/kitty/herdr.conf")
+# Le prompt fait vingt lignes : plutôt que de les taper dans le shell de
+# l'onglet, herdr les pose dans l'environnement du pane, et la commande tapée
+# tient sur une ligne.
+PROMPT_ENV = "WAYBAR_UPDATES_PROMPT"
 
 CLAUDE_PROMPT = """%s
 
@@ -218,6 +231,98 @@ def download_size(pkgs):
     except (OSError, subprocess.SubprocessError, ValueError):
         return None
     return total / 1024 / 1024
+
+
+def herdr(*args):
+    """Une commande herdr ; son `result`, ou None si elle échoue.
+
+    `pane run` réussit sans rien imprimer : un succès muet vaut `{}`, pas None.
+    """
+    try:
+        out = subprocess.run(["herdr", *args], capture_output=True, text=True,
+                             timeout=10)
+        if out.returncode != 0:
+            return None
+        if not out.stdout.strip():
+            return {}
+        return json.loads(out.stdout).get("result")
+    except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
+        return None
+
+
+def herdr_window():
+    """Adresse Hyprland de la fenêtre qui affiche herdr : celle dont le
+    processus a un client `herdr` pour enfant, quelle que soit sa classe."""
+    try:
+        clients = json.loads(subprocess.run(
+            ["hyprctl", "clients", "-j"], capture_output=True, text=True,
+            timeout=2).stdout)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return ""
+    for c in clients:
+        pid = c.get("pid")
+        if not pid:
+            continue
+        try:
+            kids = subprocess.run(["pgrep", "-P", str(pid), "-x", "herdr"],
+                                  capture_output=True, text=True,
+                                  timeout=1).stdout
+        except (OSError, subprocess.SubprocessError):
+            kids = ""
+        if kids.strip():
+            return c.get("address", "")
+    return ""
+
+
+def show_herdr():
+    """Ramène la fenêtre herdr au premier plan, ou en ouvre une si aucune
+    n'est attachée — même geste que herdr-claude.sh."""
+    addr = herdr_window()
+    if addr:
+        subprocess.run(["hyprctl", "dispatch",
+                        'hl.dsp.focus({ window = "address:%s" })' % addr],
+                       stdout=DEVNULL, stderr=DEVNULL)
+        return
+    subprocess.run(["hyprctl", "dispatch", 'hl.dsp.focus({ workspace = "1" })'],
+                   stdout=DEVNULL, stderr=DEVNULL)
+    cmd = ["kitty", "--class", HERDR_CLASS]
+    if os.path.exists(HERDR_KITTY_CONF):
+        cmd += ["--config", HERDR_KITTY_CONF]
+    subprocess.Popen(cmd + ["--directory", os.path.expanduser("~/projects"),
+                            "--", "herdr"],
+                     start_new_session=True, stdout=DEVNULL, stderr=DEVNULL)
+
+
+def herdr_run(command, cwd, env):
+    """Tape `command` dans un nouvel onglet herdr du workspace de `cwd`.
+
+    Le workspace est celui dont le libellé porte le nom du dossier (un par
+    projet, cf. herdr-claude.sh) ; créé s'il manque, et son premier pane sert
+    alors d'onglet. Renvoie False si herdr ne répond pas, pour laisser le
+    repli Kitty prendre la main.
+    """
+    listing = herdr("workspace", "list")
+    if not listing or "workspaces" not in listing:
+        return False
+    name = os.path.basename(cwd)
+    ws = next((w["workspace_id"] for w in listing["workspaces"]
+               if w.get("label") == name), None)
+    env_args = [a for k, v in env.items() for a in ("--env", "%s=%s" % (k, v))]
+    if ws:
+        made = herdr("tab", "create", "--workspace", ws, "--cwd", cwd,
+                     "--label", "Mise à jour", "--focus", *env_args)
+    else:
+        made = herdr("workspace", "create", "--cwd", cwd, "--label", name,
+                     "--focus", *env_args)
+    pane = ((made or {}).get("root_pane") or {}).get("pane_id")
+    if not pane:
+        return False
+    # `pane run` colle ses arguments avec des espaces sans les citer : la
+    # commande part en un seul argument, déjà formée pour le shell.
+    if herdr("pane", "run", pane, command) is None:
+        return False
+    show_herdr()
+    return True
 
 
 class UpdatesPopup(LayerPopup):
@@ -406,16 +511,24 @@ class UpdatesPopup(LayerPopup):
         `yay -Syu --noconfirm` aboutit sans terminal pour y taper un mot de passe.
         Le terminal reste nécessaire pour la conversation — c'est là que la
         session demande un arbitrage et qu'on valide ses commandes.
+
+        Ce terminal est un onglet herdr dans le workspace du dépôt de config,
+        pour que la session vive avec les autres Claude ; sans herdr, un Kitty
+        à part sur le bureau 5, comme avant.
         """
         intro = PROMPT_WITH_UPDATES if upgrade else PROMPT_NOTHING_TODO
         cwd = CONFIG_REPO if os.path.isdir(CONFIG_REPO) else os.path.expanduser("~")
-        script = "%s %s; %s --refresh" % (
-            shlex.quote(CLAUDE_BIN), shlex.quote(CLAUDE_PROMPT % intro),
-            shlex.quote(UPDATES_SH))
-        subprocess.Popen(
-            ["kitty", "--class", TERM_CLASS, "--directory", cwd,
-             "-T", "Mise à jour par Claude", "bash", "-c", script],
-            start_new_session=True, stdout=DEVNULL, stderr=DEVNULL)
+        prompt = CLAUDE_PROMPT % intro
+        command = '%s "$%s"; %s --refresh' % (
+            shlex.quote(CLAUDE_BIN), PROMPT_ENV, shlex.quote(UPDATES_SH))
+        if not herdr_run(command, cwd, {PROMPT_ENV: prompt}):
+            script = "%s %s; %s --refresh" % (
+                shlex.quote(CLAUDE_BIN), shlex.quote(prompt),
+                shlex.quote(UPDATES_SH))
+            subprocess.Popen(
+                ["kitty", "--class", TERM_CLASS, "--directory", cwd,
+                 "-T", "Mise à jour par Claude", "bash", "-c", script],
+                start_new_session=True, stdout=DEVNULL, stderr=DEVNULL)
         self.close()
 
     def _refresh(self, _btn):

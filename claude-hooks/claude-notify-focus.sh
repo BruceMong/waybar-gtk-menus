@@ -31,10 +31,13 @@ fi
 
 # --- Notification ---
 # Détachée du hook (setsid -f) pour ne jamais bloquer Claude Code.
-export CNF_MSG="$msg" CNF_DIR="$dir" CNF_ADDR="$addr"
+# L'icône est la mascotte, posée à côté du script. En PNG et non en SVG :
+# swaync n'ouvre pas un SVG donné par chemin (icône « image manquante »).
+icon="${BASH_SOURCE[0]%/*}/clawd.png"
+export CNF_ICON="$icon" CNF_MSG="$msg" CNF_DIR="$dir" CNF_ADDR="$addr"
 if [ -n "$addr" ]; then
     setsid -f bash -c '
-        action=$(notify-send -a "Claude Code" -u normal -t 0 \
+        action=$(notify-send -a "Claude Code" -i "$CNF_ICON" -u normal -t 0 \
             -A "default=Aller à la fenêtre" \
             "Claude Code — $CNF_DIR" "$CNF_MSG")
         if [ "$action" = "default" ]; then
@@ -43,7 +46,7 @@ if [ -n "$addr" ]; then
     ' >/dev/null 2>&1
 else
     # Fenêtre introuvable : notification simple sans action.
-    notify-send -a "Claude Code" -u normal "Claude Code — $CNF_DIR" "$CNF_MSG"
+    notify-send -a "Claude Code" -i "$icon" -u normal "Claude Code — $CNF_DIR" "$CNF_MSG"
 fi
 
 exit 0

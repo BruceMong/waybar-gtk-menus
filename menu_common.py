@@ -591,13 +591,30 @@ ICON_WIDTH = 22     # colonne d'icônes, en px
 ROW_SPACING = 10    # écart icône ↔ texte
 
 
+class _IconSlot(Gtk.Overlay):
+    """Overlay dont la hauteur est celle du glyphe, et non du gabarit.
+
+    Un GtkOverlay ne mesure que son enfant principal ; le gabarit vide n'a
+    aucune hauteur, et le calque était centré sur zéro pixel puis rogné à
+    l'allocation : la moitié basse de chaque icône disparaissait. La largeur
+    reste celle du gabarit, c'est le but ; seule la hauteur est reprise du
+    label.
+    """
+
+    def do_get_preferred_height(self):
+        return self.label.get_preferred_height()
+
+    def do_get_preferred_height_for_width(self, width):
+        return self.label.get_preferred_height()
+
+
 def _icon_slot(icon):
     """Colonne d'icône de largeur strictement fixe, ou None si `icon` est None.
 
     Un simple size_request sur le label ne suffirait pas : c'est un minimum, et
     un glyphe large (le réseau, l'enveloppe) en réclame davantage — le libellé
     de cette ligne-là décrocherait de quelques pixels vers la droite, ce qui se
-    voit immédiatement dans une carte. Un GtkOverlay prend la taille de son
+    voit immédiatement dans une carte. Un GtkOverlay prend la largeur de son
     enfant principal et ignore celle de ses calques : le gabarit vide impose
     22 px, le glyphe se centre dedans et déborde silencieusement s'il est plus
     large.
@@ -610,11 +627,11 @@ def _icon_slot(icon):
     lbl.get_style_context().add_class("row-icon")
     gauge = Gtk.Box()
     gauge.set_size_request(ICON_WIDTH, -1)
-    slot = Gtk.Overlay()
+    slot = _IconSlot()
+    slot.label = lbl
     slot.add(gauge)
     slot.add_overlay(lbl)
     slot.set_valign(Gtk.Align.CENTER)
-    slot.label = lbl
     return slot
 
 

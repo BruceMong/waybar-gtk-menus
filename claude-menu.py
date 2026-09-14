@@ -21,7 +21,16 @@ Navigation :
   - 󰍡  : saisir une réponse et l'envoyer dans la session
   - 󰑓  : rouvrir un terminal sur une session détachée (claude --resume)
   - 󰅖  : terminer la session (un second clic confirme)
-  - 󰘖 Rassembler : ramène les sessions à traiter sur ce bureau
+  - 󰘖 Rassembler : ramène les fenêtres à traiter sur ce bureau
+  - 󰆍 herdr      : remonte la fenêtre herdr
+
+Sessions sous herdr (multiplexeur de terminal pour agents) : elles n'ont pas
+de fenêtre à elles, mais un pane, que herdr sait viser par son socket. Le clic
+fait alors `herdr agent focus` puis remonte la fenêtre herdr ; la réponse part
+par `herdr agent prompt`, sans focus ni frappe simulée — on répond de n'importe
+où sans quitter ce qu'on faisait ; « rouvrir » crée un tab dans le workspace
+herdr du projet ; « terminer » referme aussi le pane. Sans herdr, rien de tout
+cela n'est sollicité.
 
 Les données viennent des hooks (~/.claude/hooks/claude-session-lib.sh) et des
 transcripts, via claude_sessions_data.py. Le contenu se rafraîchit tout seul :
@@ -222,6 +231,65 @@ def hypr(*args):
     subprocess.run(["hyprctl", "dispatch", lua], capture_output=True)
 
 
+def herdr(*args):
+    """Une commande herdr ; None si elle échoue ou si herdr manque."""
+    try:
+        out = subprocess.run(["herdr", *args], capture_output=True,
+                             text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if out.returncode != 0:
+        return None
+    try:
+        import json
+        return json.loads(out.stdout).get("result")
+    except (ValueError, AttributeError):
+        return {}
+
+
+def herdr_window():
+    """Adresse de la fenêtre qui affiche herdr : celle dont le processus a un
+    client `herdr` pour enfant. Indépendant de la classe ou du terminal."""
+    import json
+    try:
+        clients = json.loads(subprocess.run(["hyprctl", "clients", "-j"],
+                                            capture_output=True, text=True,
+                                            timeout=2).stdout)
+    except Exception:
+        return ""
+    for c in clients:
+        pid = c.get("pid")
+        if not pid:
+            continue
+        try:
+            kids = subprocess.run(["pgrep", "-P", str(pid), "-x", "herdr"],
+                                  capture_output=True, text=True,
+                                  timeout=1).stdout
+        except Exception:
+            kids = ""
+        if kids.strip():
+            return c.get("address", "")
+    return ""
+
+
+def show_herdr():
+    """Remonte la fenêtre herdr, ou en ouvre une si aucune n'est attachée.
+    HERDR_LAUNCH permet d'imposer la commande (terminal, config dédiée)."""
+    addr = herdr_window()
+    if addr:
+        hypr("focuswindow", f"address:{addr}")
+        return
+    launch = os.environ.get("HERDR_LAUNCH")
+    if launch:
+        run_detached(["bash", "-c", launch])
+        return
+    cmd = ["kitty", "--class", "herdr"]
+    conf = os.path.expanduser("~/.config/kitty/herdr.conf")
+    if os.path.exists(conf):          # config Kitty dédiée à herdr, si l'on en a une
+        cmd += ["--config", conf]
+    run_detached(cmd + ["--", "herdr"])
+
+
 def state_phrase(status, age_seconds):
     """« attend depuis 18min » — l'état et son ancienneté d'une seule voix."""
     return PHRASES.get(status, "{age}").format(age=humanize(age_seconds))
@@ -347,6 +415,14 @@ class ClaudeMenu(LayerPopup):
         )
         self._gather_btn.connect("clicked", self._on_gather)
         row.pack_end(self._gather_btn, False, False, 0)
+        self._herdr_btn = Gtk.Button(label="󰆍 herdr")
+        self._herdr_btn.get_style_context().add_class("glyph")
+        self._herdr_btn.get_style_context().add_class("pill")
+        self._herdr_btn.set_size_request(-1, 24)
+        self._herdr_btn.set_tooltip_text("Remonter la fenêtre herdr")
+        self._herdr_btn.connect("clicked", lambda _b: (show_herdr(), self.close()))
+        self._herdr_btn.set_no_show_all(True)
+        row.pack_end(self._herdr_btn, False, False, 0)
         self._summary_row = row
         self.box.pack_start(row, False, False, 0)
 
@@ -416,8 +492,13 @@ class ClaudeMenu(LayerPopup):
             text = f"{total} session{'s' if total > 1 else ''}, rien à traiter"
         self._summary_label.set_markup(
             f"<span foreground='{DIM}' size='small'>{text}</span>")
-        self._gather_btn.set_sensitive(bool(attention))
-        self._gather_attention = attention
+        # Rassembler ne déplace que des fenêtres ; les sessions herdr n'en ont
+        # pas, elles ont leur bouton à elles.
+        movable = [s for s in attention if s.get("addr")]
+        self._gather_btn.set_sensitive(bool(movable))
+        self._gather_btn.set_visible(any(s.get("addr") for s in visible))
+        self._gather_attention = movable
+        self._herdr_btn.set_visible(any(s.get("herdr_pane") for s in visible))
 
     @staticmethod
     def _group_by_project(sessions):
@@ -539,6 +620,7 @@ class ClaudeMenu(LayerPopup):
         status = session.get("status", "idle")
         colour = COLORS.get(status, "#ebebf0")
         addr = session.get("addr", "")
+        reachable = bool(addr or session.get("herdr_pane"))
 
         btn = Gtk.Button()
         ctx = btn.get_style_context()
@@ -575,7 +657,7 @@ class ClaudeMenu(LayerPopup):
         reply_reveal = Gtk.Revealer()
         reply_reveal.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
 
-        if addr:
+        if reachable:
             reply = glyph_button("󰍡", "Écrire une réponse et l'envoyer",
                                  lambda _b: self._toggle_reply(reply_reveal))
             arow.pack_start(hover.watch(reply), False, False, 0)
@@ -649,8 +731,8 @@ class ClaudeMenu(LayerPopup):
         row.pack_start(inner, True, True, 0)
         btn.add(row)
         hover.watch(btn)
-        btn.connect("clicked", self._on_jump, addr)
-        if not addr:
+        btn.connect("clicked", self._on_jump, session)
+        if not reachable:
             btn.set_tooltip_text("Fenêtre introuvable — session détachée")
 
         widgets = {"icon": icon_lbl, "title": title_lbl, "meta": meta_lbl,
@@ -722,7 +804,8 @@ class ClaudeMenu(LayerPopup):
         """Ce qui, en changeant, impose de rebâtir la liste plutôt que de la
         repeindre : une session apparaît, disparaît, ou change d'état."""
         return tuple(sorted((s.get("session_id"), s.get("status"),
-                             bool(s.get("addr")), s.get("title"))
+                             bool(s.get("addr") or s.get("herdr_pane")),
+                             s.get("title"))
                             for s in sessions))
 
     def _tick(self):  # noqa: D401
@@ -792,8 +875,14 @@ class ClaudeMenu(LayerPopup):
         if opening:
             revealer._entry.grab_focus()
 
-    def _on_jump(self, _btn, addr):
-        if addr:
+    def _on_jump(self, _btn, session):
+        pane = session.get("herdr_pane")
+        addr = session.get("addr")
+        if pane:
+            # Côté herdr : workspace + tab du pane ; côté Hyprland : sa fenêtre.
+            herdr("agent", "focus", pane)
+            show_herdr()
+        elif addr:
             hypr("focuswindow", f"address:{addr}")
         self.close()
 
@@ -822,11 +911,43 @@ class ClaudeMenu(LayerPopup):
         sid = session.get("session_id")
         if not sid:
             return
-        run_detached(["kitty", "--class", "waybar.modules",
-                      "--directory", cwd,
-                      "-T", f"claude — {session.get('dir', '')}",
-                      "claude", "--resume", sid])
+        args = ["--resume", sid]
+        if session.get("permission_mode") == "bypassPermissions":
+            args.insert(0, "--dangerously-skip-permissions")
+        if self._resume_in_herdr(session, cwd, args):
+            show_herdr()
+        else:
+            run_detached(["kitty", "--class", "waybar.modules",
+                          "--directory", cwd,
+                          "-T", f"claude — {session.get('dir', '')}",
+                          "claude", *args])
         self.close()
+
+    @staticmethod
+    def _resume_in_herdr(session, cwd, args):
+        """Nouveau tab dans le workspace herdr du projet (celui dont le label
+        est le nom du dossier, sinon un nouveau), et Claude dedans. False si
+        herdr ne répond pas — l'appelant retombe sur un terminal."""
+        res = herdr("workspace", "list")
+        if res is None:
+            return False
+        label = session.get("dir") or os.path.basename(cwd)
+        ws = next((w["workspace_id"] for w in res.get("workspaces") or []
+                   if w.get("label") == label), None)
+        if ws:
+            tab = herdr("tab", "create", "--workspace", ws, "--cwd", cwd, "--focus")
+            pane = ((tab or {}).get("root_pane") or {}).get("pane_id")
+        else:
+            created = herdr("workspace", "create", "--cwd", cwd,
+                            "--label", label, "--focus")
+            pane = ((created or {}).get("root_pane") or {}).get("pane_id")
+        if not pane:
+            return False
+        # `agent start` bloque jusqu'à ce que Claude soit prêt : en arrière-plan.
+        name = f"r{int(time.time()) % 100000000}"
+        run_detached(["herdr", "agent", "start", name, "--kind", "claude",
+                      "--pane", pane, "--", *args])
+        return True
 
     def _on_kill(self, btn, session):
         """Premier clic : arme le bouton. Second clic : termine la session."""
@@ -841,6 +962,10 @@ class ClaudeMenu(LayerPopup):
             os.kill(int(pid), signal.SIGTERM)
         except (OSError, TypeError, ValueError):
             pass
+        # Sous herdr, un pane vide resterait : on le referme avec la session.
+        pane = session.get("herdr_pane")
+        if pane:
+            run_detached(["herdr", "pane", "close", pane])
         self.close()
 
     @staticmethod
@@ -864,7 +989,14 @@ class ClaudeMenu(LayerPopup):
         """
         text = entry.get_text().strip()
         addr = session.get("addr")
-        if not text or not addr:
+        pane = session.get("herdr_pane")
+        if not text or not (addr or pane):
+            return
+        if pane:
+            # Par le socket : ni focus, ni frappe, ni changement de bureau.
+            run_detached(["herdr", "agent", "prompt", pane, text])
+            self._open_replies.discard(id(revealer))
+            self.close()
             return
         env = dict(os.environ, CS_REPLY=text, CS_ADDR=addr)
         script = (

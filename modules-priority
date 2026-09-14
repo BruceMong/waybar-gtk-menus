@@ -20,7 +20,7 @@ clock#date
 # et la barre n'a jamais montré ce qui jouait. Les deux modules qui passent
 # devant lui restent atteignables en un clic par le menu « ⋮ ».
 mpris
-custom/chrome
+custom/chrome custom/zen
 cpu temperature memory disk
 # Le nom de l'application est l'ancre de la menu bar (avec la pomme et
 # l'heure) : il ne se replie qu'en tout dernier recours.

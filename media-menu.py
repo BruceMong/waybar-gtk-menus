@@ -46,12 +46,13 @@ REFRESH_MS = 1000
 
 # Lecteurs dont le média vit dans un onglet : ce sont eux qui gagnent à passer
 # en PiP, et eux dont le titre doit être cherché sur la fenêtre.
+# Zen se déclare « firefox » sur MPRIS — le nom du moteur, pas de l'application.
 BROWSERS = ("chromium", "chrome", "firefox", "brave", "vivaldi")
 
-# Classe Hyprland des fenêtres où chercher un titre de vidéo. La même que
-# celle visée par mpris-pip.sh : le PWA « chrome-notes… » porte sa propre
+# Classes Hyprland des fenêtres où chercher un titre de vidéo. Les mêmes que
+# celles visées par mpris-pip.sh : le PWA « chrome-notes… » porte sa propre
 # classe et n'est pas un lecteur.
-BROWSER_CLASSES = ("google-chrome", "chromium", "firefox")
+BROWSER_CLASSES = ("google-chrome", "chromium", "firefox", "zen")
 
 # Fenêtre Picture-in-Picture, Chrome comme Firefox. Même motif que la règle
 # `pip-float` de hyprland.lua — les deux désignent la même fenêtre, elles
@@ -59,8 +60,9 @@ BROWSER_CLASSES = ("google-chrome", "chromium", "firefox")
 PIP_TITLE = re.compile(r"picture.in.picture", re.I)
 
 # Suffixe que le navigateur colle au titre de la fenêtre, et compteur d'onglet
-# que Gmail ou YouTube posent devant.
-BROWSER_SUFFIX = re.compile(r"\s*[-–]\s*(Google Chrome|Chromium|Mozilla Firefox)\s*$")
+# que Gmail ou YouTube posent devant. Zen sépare par un tiret cadratin (—),
+# Chrome par un tiret simple.
+BROWSER_SUFFIX = re.compile(r"\s*[-–—]\s*(Google Chrome|Chromium|Mozilla Firefox|Zen Browser)\s*$")
 TAB_COUNTER = re.compile(r"^\(\d+\)\s*")
 SITE_SUFFIX = re.compile(r"\s*[-–]\s*(YouTube|Vimeo|Twitch|Dailymotion|SoundCloud)\s*$", re.I)
 

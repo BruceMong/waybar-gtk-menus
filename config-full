@@ -5,7 +5,7 @@
     "spacing": 2,
     "reload_style_on_change": true,
 
-    "modules-left": ["ext/workspaces", "custom/ws-tens", "hyprland/window", "custom/chrome", "mpris"],
+    "modules-left": ["ext/workspaces", "custom/ws-tens", "hyprland/window", "custom/chrome", "custom/zen", "mpris"],
     "modules-center": [],
     "modules-right": ["custom/voice-rec", "custom/recorder", "privacy", "group/systray", "group/tools", "group/status", "group/system", "group/connect", "pulseaudio#mic", "group/audio", "backlight", "custom/caffeine", "battery", "group/datetime", "custom/power"],
 
@@ -27,7 +27,7 @@
                 "on-scroll-down": "shift_down"
             },
             "on-click": "~/.config/waybar/calendar-menu.py 60",
-            "on-click-right": "uwsm app -t service -S both -- google-chrome-stable https://calendar.google.com"
+            "on-click-right": "uwsm app -t service -S both -- xdg-open https://calendar.google.com"
         }
     },
 
@@ -100,6 +100,7 @@
         "format": "{initialClass}",
         "rewrite": {
             "google-chrome": "Google Chrome",
+            "zen": "Zen",
             "chrome-notes\\.example\\.com.*": "Notes",
             "chrome-(?!notes\\.example\\.com).*": "Chrome",
             "kitty": "Kitty",
@@ -324,7 +325,7 @@
         "signal": 14,
         "max-length": 30,
         "on-click": "~/.config/waybar/calendar_agenda.py --menu",
-        "on-click-right": "uwsm app -t service -S both -- google-chrome-stable https://calendar.google.com"
+        "on-click-right": "uwsm app -t service -S both -- xdg-open https://calendar.google.com"
     },
 
     "custom/updates": {
@@ -340,6 +341,12 @@
         "format": "󰊯",
         "tooltip": "Google Chrome",
         "on-click": "uwsm app -t service -S both -- google-chrome-stable"
+    },
+
+    "custom/zen": {
+        "format": "󰈹",
+        "tooltip": "Zen Browser",
+        "on-click": "uwsm app -t service -S both -- zen-browser"
     },
 
     "custom/ws-tens": {

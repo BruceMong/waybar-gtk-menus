@@ -270,7 +270,7 @@ class CalendarPopup(LayerPopup):
     # ---- Actions ----
 
     def _opener(self, url, calendar=None):
-        """Ouvre la visio ou l'événement, dans le profil Chrome qui y a accès.
+        """Ouvre la visio ou l'événement dans le compte qui y a accès.
 
         Les agendas pro sont partagés vers le compte perso : ils s'affichent
         donc ici, mais leurs événements ne s'ouvrent que depuis le profil du
@@ -311,8 +311,8 @@ class CalendarPopup(LayerPopup):
 
     def _new_event(self, _btn):
         subprocess.Popen(
-            ["setsid", "-f", "google-chrome-stable",
-             "https://calendar.google.com/calendar/u/0/r/eventedit"],
+            ca.LAUNCH + ["xdg-open",
+                         "https://calendar.google.com/calendar/u/0/r/eventedit"],
             stdout=DEVNULL, stderr=DEVNULL)
         self.close()
 
@@ -328,8 +328,7 @@ class CalendarPopup(LayerPopup):
         self.close()
 
     def _open_web(self, _btn):
-        subprocess.Popen(["setsid", "-f", "google-chrome-stable",
-                          "https://calendar.google.com"],
+        subprocess.Popen(ca.LAUNCH + ["xdg-open", "https://calendar.google.com"],
                          stdout=DEVNULL, stderr=DEVNULL)
         self.close()
 

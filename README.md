@@ -125,7 +125,7 @@ surfaces, so the cost is limited to the bar and the popups.
 | brightness | `brightnessctl`, `hyprsunset` (night light), `hypridle` |
 | battery | `powerprofilesctl` (power-profiles-daemon), `hypridle` (idle delays), `systemd-inhibit` for caffeine — a transient user unit holding a logind idle inhibitor, so hypridle stays alive and still locks before suspend. The `custom/caffeine` icon only shows while caffeine is on; the switch to turn it on lives in the battery popup |
 | notifications / dnd | `swaync` |
-| updates | `checkupdates` (pacman-contrib), `yay` for AUR counts. With `claude` (Claude Code) on the PATH the popup grows a *supervised* run: a Claude session that upgrades the system itself, then reports on what the upgrade left behind — `.pacnew` files, failed units, orphans, Arch news — and syncs the config repo pointed at by `CONFIG_REPO` in `updates-menu.py`. It needs passwordless `sudo`; without it `yay` stalls on a password prompt the session has no terminal to answer |
+| updates | `checkupdates` (pacman-contrib), `yay` for AUR counts. With `claude` (Claude Code) on the PATH the popup grows a *supervised* run: a Claude session that upgrades the system itself, then reports on what the upgrade left behind — `.pacnew` files, failed units, orphans, Arch news — and syncs the config repo pointed at by `CONFIG_REPO` in `updates-menu.py`. When a [herdr](https://herdr.dev) server is running, the session opens as a tab in the workspace named after that repo (created if missing); otherwise it gets a plain `kitty` window. It needs passwordless `sudo`; without it `yay` stalls on a password prompt the session has no terminal to answer |
 | media | `playerctl`, Waybar's `mpris` module — title while playing, greyed while paused, nothing when stopped. Left click opens `media-menu.py` (track, prev / play-pause / next, plus a player picker when several are running); scroll skips tracks, middle click goes back, right click toggles Chrome PiP (`wtype`, `jq`, and the bundled `pip-extension/` bound to Alt+Shift+P) |
 | systemd | `systemctl --user` / system units |
 | keybindings | Hyprland config in `~/.config/hypr` |
@@ -200,7 +200,7 @@ written by hooks — without them the module simply renders empty and Waybar
 hides it.
 
 ```bash
-cp claude-hooks/*.sh ~/.claude/hooks/
+cp claude-hooks/*.sh claude-hooks/clawd.png ~/.claude/hooks/
 chmod +x ~/.claude/hooks/*.sh
 ```
 
@@ -217,6 +217,20 @@ Then register them in `~/.claude/settings.json`:
   }
 }
 ```
+
+### With herdr
+
+If your sessions live inside [herdr](https://herdr.dev) (a terminal
+multiplexer for coding agents), they have no window of their own — the popup
+targets their **pane** through the herdr socket instead: clicking a session
+focuses its pane and raises the herdr window, replies go through
+`herdr agent prompt` (no focus stealing, no simulated typing), *resume* opens
+a new tab in the project's herdr workspace, and *kill* also closes the pane.
+Run `herdr integration install claude` so herdr knows each pane's session id;
+without it the hooks fall back to the pane id captured at launch. Set
+`HERDR_LAUNCH` to the command that should open a herdr window when none is
+attached (default: `kitty -- herdr`, with `~/.config/kitty/herdr.conf` if it
+exists). Nothing here runs when herdr is not installed.
 
 Don't want it? Remove `custom/claude` from `modules-right` in `config-full`.
 
@@ -354,20 +368,36 @@ select a tab (Chrome reports `CanRaise = false` and publishes no `xesam:url`):
 
 | Call | Means | Target window |
 |------|-------|--------|
-| `mpris-pip.sh` (right click) | "pop out what I'm looking at" | most recently focused Chrome window |
-| `mpris-pip.sh --playing` (menu) | "pop out what is playing" | window whose title carries the MPRIS title, else the most recent one |
+| `mpris-pip.sh` (right click) | "pop out what I'm looking at" | most recently focused browser window |
+| `mpris-pip.sh --playing` (menu) | "pop out what is playing" | window whose title carries the MPRIS title, else the most recent one of the same browser family |
 
 Matching strips Unicode direction marks — YouTube wraps channel names in them,
 so the window title carries them and the MPRIS title does not.
 
-Picking the *tab* is [`pip-extension/`](pip-extension/)'s job, a small unpacked
-extension shipped here and bound to Alt+Shift+P alongside Google's. It searches
-every window for a tab holding a video, tries PiP without leaving the current
-tab, and only switches tabs — then switches straight back — if the page refuses
-from the background. Install it once: see its README.
+The script speaks to two browser families and picks the shortcut from the
+target window's class:
 
-Until it existed, a video playing in a background tab simply could not be popped
-out, and the click failed mute.
+- **Zen / Firefox** (`zen`, `firefox`) get their native Ctrl+Shift+], nothing to
+  install. Zen announces itself as `firefox` over MPRIS. The shortcut only
+  reaches the active tab's video, so also flip
+  `media.videocontrols.picture-in-picture.enable-when-switching-tabs.enabled`
+  in `about:config`: Firefox then pops out a playing video by itself the moment
+  you leave its tab, which covers the background case.
+- **Chrome** (`google-chrome`) has no native shortcut, so picking the *tab* is
+  [`pip-extension/`](pip-extension/)'s job, a small unpacked extension shipped
+  here and bound to Alt+Shift+P alongside Google's. It searches every window
+  for a tab holding a video, tries PiP without leaving the current tab, and
+  only switches tabs — then switches straight back — if the page refuses from
+  the background. Install it once: see its README. Until it existed, a video
+  playing in a background tab simply could not be popped out, and the click
+  failed mute.
+
+Opening Google Calendar links follows the system default browser
+(`xdg-settings get default-web-browser`): Chrome gets the per-account profile
+routing described above; anything else receives the URL through `xdg-open`
+with `authuser=<mail>` appended. In Zen, a *space routing* rule per
+`authuser=<mail>` then lands the tab in that account's space, hence its
+container, hence its Google session.
 
 ## Layout
 

@@ -22,6 +22,13 @@ Trois entretiens sont faits à chaque lecture :
   - les sessions « terminées » dont la fenêtre est à l'écran passent en
     « idle » : si l'utilisateur la regarde, la réponse est considérée comme lue et
     elle cesse de réclamer son attention.
+
+Sessions sous herdr (multiplexeur de terminal pour agents) : le pty appartient
+au serveur herdr, pas à une fenêtre, donc `addr` est vide. Les hooks notent
+`herdr_pane` (HERDR_PANE_ID) ; quand l'intégration Claude de herdr est en
+place, `herdr agent list` connaît en plus le session_id de chaque pane, et
+c'est cette source qui prime — elle suit le pane s'il change de workspace,
+là où l'id noté au lancement resterait figé. Sans herdr, tout ceci est inerte.
 """
 import glob
 import json
@@ -81,6 +88,61 @@ def active_window():
     return (data or {}).get("address", "")
 
 
+# --------------------------------------------------------------------------
+# herdr
+# --------------------------------------------------------------------------
+def _herdr(*args):
+    """Une commande `herdr` en JSON, ou None si herdr manque ou ne répond pas."""
+    try:
+        out = subprocess.run(["herdr", *args], capture_output=True,
+                             text=True, timeout=2).stdout
+        data = json.loads(out)
+        return data.get("result") if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def herdr_agents():
+    """session_id -> {pane_id, workspace_id, agent_status} des Claude que herdr
+    voit. Vide si herdr est absent ou si son intégration Claude ne l'est pas
+    (le session_id vient d'elle)."""
+    res = _herdr("agent", "list")
+    out = {}
+    for a in (res or {}).get("agents") or []:
+        sid = ((a.get("agent_session") or {}).get("value")
+               if a.get("agent") == "claude" else None)
+        if sid:
+            out[sid] = {"pane_id": a.get("pane_id"),
+                        "workspace_id": a.get("workspace_id"),
+                        "agent_status": a.get("agent_status")}
+    return out
+
+
+def herdr_workspace_labels():
+    res = _herdr("workspace", "list")
+    return {w.get("workspace_id"): w.get("label") or ""
+            for w in (res or {}).get("workspaces") or []}
+
+
+def herdr_focused_pane():
+    """Le pane qui a le focus dans herdr — s'il est aussi sous les yeux, c'est-
+    à-dire si la fenêtre active est un client herdr (un `herdr` enfant du
+    processus de la fenêtre). Sinon, chaîne vide."""
+    win = _hypr("activewindow") or {}
+    pid = win.get("pid")
+    if not pid:
+        return ""
+    try:
+        kids = subprocess.run(["pgrep", "-P", str(pid), "-x", "herdr"],
+                              capture_output=True, text=True, timeout=1).stdout
+    except Exception:
+        kids = ""
+    if not kids.strip():
+        return ""
+    snap = _herdr("api", "snapshot") or {}
+    return (snap.get("snapshot") or {}).get("focused_pane_id") or ""
+
+
 def _drop(path):
     try:
         os.remove(path)
@@ -136,10 +198,20 @@ def load_sessions(enrich=False):
         entries.append((path, data))
 
     focused = active_window()
+    # herdr n'est interrogé que si au moins une session y vit : sans lui, la
+    # lecture reste celle d'avant, sans un seul sous-processus de plus.
+    agents = herdr_agents() if any(d.get("herdr_pane") for _, d in entries) else {}
+    herdr_focused = herdr_focused_pane() if agents else ""
     for path, data in _dedupe_by_pid(entries):
-        # Réponse terminée sur une fenêtre sous les yeux : elle est lue.
-        if (data.get("status") == "done" and focused
-                and data.get("addr") == focused):
+        h = agents.get(data.get("session_id"))
+        if h and h.get("pane_id"):
+            data["herdr_pane"] = h["pane_id"]
+            data["herdr_workspace"] = h.get("workspace_id", "")
+        # Réponse terminée sur une fenêtre — ou un pane herdr — sous les yeux :
+        # elle est lue.
+        seen = (focused and data.get("addr") == focused) or (
+            herdr_focused and data.get("herdr_pane") == herdr_focused)
+        if data.get("status") == "done" and seen:
             data["status"] = "idle"
             try:
                 tmp = path + ".tmp"
@@ -309,9 +381,19 @@ def git_state(cwd):
 
 def _enrich_all(sessions):
     workspaces = window_workspaces()
+    labels = (herdr_workspace_labels()
+              if any(s.get("herdr_pane") for s in sessions) else {})
     git_cache = {}
     for s in sessions:
-        s["workspace"] = workspaces.get(s.get("addr"), "")
+        pane = s.get("herdr_pane")
+        if pane:
+            # Le workspace herdr tient lieu de « bureau ». Faute d'id (hook
+            # d'intégration absent), le préfixe du pane le donne.
+            ws_id = s.get("herdr_workspace") or pane.split(":")[0]
+            label = labels.get(ws_id, ws_id)
+            s["workspace"] = f"herdr › {label}" if label else "herdr"
+        else:
+            s["workspace"] = workspaces.get(s.get("addr"), "")
 
         cwd = s.get("cwd")
         if cwd not in git_cache:

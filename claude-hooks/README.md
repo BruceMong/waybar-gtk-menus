@@ -9,7 +9,7 @@ jump to the right terminal.
 Install:
 
 ```bash
-cp *.sh ~/.claude/hooks/ && chmod +x ~/.claude/hooks/*.sh
+cp *.sh clawd.png ~/.claude/hooks/ && chmod +x ~/.claude/hooks/*.sh
 ```
 
 Then register them in `~/.claude/settings.json` — see the main README.
@@ -22,3 +22,4 @@ Then register them in `~/.claude/settings.json` — see the main README.
 | `claude-stop-notify.sh` | Stop | marks it *done* + notifies |
 | `claude-notify-focus.sh` | Notification | marks it *waiting* + notifies |
 | `claude-session-lib.sh` | — | shared library, sourced by the others |
+| `clawd.png` | — | notification icon (the Claude Code mascot); PNG because swaync won't load an SVG given by path |

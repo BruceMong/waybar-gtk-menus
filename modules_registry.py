@@ -72,6 +72,8 @@ MODULES = [
     # coupe tous les trois. `-S both` remplace la redirection vers /dev/null.
     Module(["custom/chrome"], "\U000f02af", "Chrome",
            "uwsm app -t service -S both -- google-chrome-stable"),
+    Module(["custom/zen"], "\U000f0239", "Zen",
+           "uwsm app -t service -S both -- zen-browser"),
     Module(["hyprland/window"], "\U000f05d0", "Fenêtre"),
     # transient : le module s'efface de lui-même dès qu'aucun lecteur ne
     # tourne (`format-stopped` vide dans config-full), et son menu doit

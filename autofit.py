@@ -85,7 +85,7 @@ ZONES = ("modules-left", "modules-center", "modules-right")
 ICON_CELL = {
     "cpu", "network", "pulseaudio#icon", "custom/tray-handle",
     "custom/toggle-info", "custom/keybinds", "backlight", "battery",
-    "custom/caffeine", "custom/chrome",
+    "custom/caffeine", "custom/chrome", "custom/zen",
     "custom/power",
 }
 
@@ -99,6 +99,7 @@ ICON_CELL = {
 SPECS = {
     "custom/ws-tens":          ("+10", PAD_MODULE, 13),
     "custom/chrome":           ("\U000f00af", PAD_MODULE, 14),
+    "custom/zen":              ("\U000f0239", PAD_MODULE, 14),
     "clock#time":              ("", PAD_MODULE, 13),
     "clock#date":              ("", PAD_MODULE, 13),
     "custom/tray-handle":      ("\U000f0141", PAD_ICON, 14),

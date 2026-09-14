@@ -176,17 +176,42 @@ def with_authuser(url, calendar):
     return "%s%sauthuser=%s" % (url, sep, quote(email))
 
 
+# Lancement détaché : `-t service` fait forker par systemd --user, sinon le
+# navigateur naît dans le control-group de waybar et meurt avec la barre.
+LAUNCH = ["uwsm", "app", "-t", "service", "-S", "both", "--"]
+
+
+def default_browser():
+    """Identifiant .desktop du navigateur par défaut, sans l'extension."""
+    try:
+        out = subprocess.check_output(
+            ["xdg-settings", "get", "default-web-browser"],
+            text=True, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+    return out.strip().removesuffix(".desktop")
+
+
 def open_command(url, calendar=None, conf=None):
     """La commande qui ouvre `url` là où il s'ouvre vraiment.
 
-    Sans profil identifié on retombe sur le lancement nu : mieux vaut une
-    fenêtre dans le mauvais compte qu'un clic qui ne fait rien.
+    Chrome : un profil par compte, choisi par chrome-open.py. Sans profil
+    identifié on retombe sur le lancement nu : mieux vaut une fenêtre dans le
+    mauvais compte qu'un clic qui ne fait rien.
+
+    Tout autre navigateur par défaut (Zen, Firefox…) reçoit l'URL par
+    xdg-open, `authuser` compris. Côté Zen, c'est le routage d'espaces qui
+    fait le tri : une règle par « authuser=<mail> » envoie l'onglet dans
+    l'espace du compte, donc dans son conteneur, donc dans sa session Google.
+    Sans cette règle l'onglet s'ouvre dans l'espace courant et `authuser`
+    tombe sur un compte que ce conteneur ne connaît pas.
     """
     conf = settings() if conf is None else conf
+    if default_browser() != "google-chrome":
+        return LAUNCH + ["xdg-open", with_authuser(url, calendar)]
     profile = chrome_profile(calendar, conf)
     if not profile:
-        return ["uwsm", "app", "-t", "service", "-S", "both",
-                "--", "google-chrome-stable", url]
+        return LAUNCH + ["google-chrome-stable", url]
     return [CHROME_OPEN, profile, with_authuser(url, calendar),
             str(conf.get("chrome_workspace", DEFAULTS["chrome_workspace"]))]
 
