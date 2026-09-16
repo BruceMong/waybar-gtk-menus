@@ -39,6 +39,14 @@ DEVNULL = subprocess.DEVNULL
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 PIP_SCRIPT = os.path.join(CONFIG_DIR, "mpris-pip.sh")
 
+# Réglage lu par ~/.config/hypr/scripts/pip-on-switch.sh : présent, le PiP sorti
+# au changement de bureau reste en place quand on revient sur le bureau de la
+# vidéo, au lieu d'être rangé dans son onglet. Un fichier plutôt qu'une pref :
+# le script est du shell, et l'état doit survivre à la session.
+PIP_KEEP = os.path.join(
+    os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")),
+    "pip-auto", "keep-on-return")
+
 # Rythme de rafraîchissement. Le popup ne montre ni progression ni pochette :
 # il n'a à suivre qu'un changement de piste ou de statut, y compris ceux
 # déclenchés depuis Spotify lui-même pendant que le menu est ouvert.
@@ -200,6 +208,7 @@ class MediaPopup(LayerPopup):
         "firefox": "\U000f0239",
     }
     IC_DEFAULT = "\U000f0387"  # note de musique
+    IC_PIP = "\U000f0567"      # vidéo — même glyphe que le menu luminosité
 
     # Le module média siège à gauche de la barre, après le nom de l'app. La
     # fenêtre étant ancrée à droite, la marge la ramène sous lui : 1280 px
@@ -247,6 +256,15 @@ class MediaPopup(LayerPopup):
                     on_click=lambda _b, n=name: self._pick(n))
                 self.player_rows.append((row, name))
 
+        # Le PiP automatique au changement de bureau vit côté Hyprland
+        # (pip-on-switch.sh) ; ce switch règle seulement ce qu'il fait au
+        # retour. Toujours affiché, même sans lecteur : c'est un réglage, pas
+        # une commande.
+        pip = self.add_card("Picture-in-Picture")
+        pip.toggle(self.IC_PIP, "Rester en PiP au retour",
+                   os.path.exists(PIP_KEEP), self._on_keep_toggled,
+                   subtitle="sinon la vidéo regagne son onglet")
+
         self._apply()
         self._tick = GLib.timeout_add(REFRESH_MS, self._refresh)
         self.connect("destroy", self._stop_refresh)
@@ -267,6 +285,16 @@ class MediaPopup(LayerPopup):
         return self.PLAYER_ICONS.get(base_name(self.player), self.IC_DEFAULT)
 
     # ---- Actions ----
+
+    def _on_keep_toggled(self, switch, _param):
+        try:
+            if switch.get_active():
+                os.makedirs(os.path.dirname(PIP_KEEP), exist_ok=True)
+                open(PIP_KEEP, "a").close()
+            else:
+                os.remove(PIP_KEEP)
+        except OSError:
+            pass
 
     def _pick(self, name):
         self._pinned = name
