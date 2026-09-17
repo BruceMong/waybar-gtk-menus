@@ -120,16 +120,24 @@ cs_prune_stale() {
 # — un `sleep infinity` laissait un scope et un sleep orphelins à chaque
 # `claude -p` de script. Idempotent : /clear, /compact et resume relancent le
 # hook sur un processus déjà placé.
+#
+# Rappelé aussi à chaque UserPromptSubmit : Claude lance ses MCP en parallèle
+# du SessionStart, et ceux qui naissent après le hook restent dans le scope du
+# terminal (constaté le 2026-09-17 : quatre @stripe/mcp de 200 Mo facturés au
+# scope kitty d'herdr, que memory.reclaim ne pouvait donc pas évacuer au gel).
+# Quand Claude est déjà dans son scope, on ne fait que rapatrier l'arbre.
 cs_scope() {
     local unit dir p
     [ -n "$CS_PID" ] && [ -d "/proc/$CS_PID" ] || return 0
-    grep -q '/claude-[^/]*\.scope$' "/proc/$CS_PID/cgroup" 2>/dev/null && return 0
     command -v systemd-run >/dev/null 2>&1 || return 0
 
-    if [ -n "${HERDR_PANE_ID:-}" ]; then
-        unit="claude-$(printf '%s' "$HERDR_PANE_ID" | tr ':' '-')"
-    else
-        unit="claude-pid-$CS_PID"
+    unit="$(sed -n 's|.*/\(claude-[^/]*\)\.scope$|\1|p' "/proc/$CS_PID/cgroup" 2>/dev/null | head -1)"
+    if [ -z "$unit" ]; then
+        if [ -n "${HERDR_PANE_ID:-}" ]; then
+            unit="claude-$(printf '%s' "$HERDR_PANE_ID" | tr ':' '-')"
+        else
+            unit="claude-pid-$CS_PID"
+        fi
     fi
     dir="$(cs_scope_dir "$unit")"
     if [ -z "$dir" ]; then
@@ -141,6 +149,7 @@ cs_scope() {
         [ -n "$dir" ] || return 0
     fi
     for p in $(cs_tree "$CS_PID"); do
+        grep -q "/$unit\.scope$" "/proc/$p/cgroup" 2>/dev/null && continue
         echo "$p" > "$dir/cgroup.procs" 2>/dev/null
     done
     return 0

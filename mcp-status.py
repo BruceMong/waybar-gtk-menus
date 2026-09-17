@@ -1,29 +1,31 @@
 #!/usr/bin/env python3
-"""Module Waybar « custom/mcp » : état des serveurs MCP partagés.
+"""Module Waybar « custom/mcp » : état des serveurs MCP.
 
-Les serveurs MCP que toutes les sessions Claude Code se partagent tournent
-dans des unités systemd utilisateur (mcp-shared@<nom>), hébergés par
-mcp-proxy — cf. ~/.local/bin/mcp-shared. Le module résume leur état :
+Deux choses à dire, et la barre ne dit que ce qui cloche :
 
-    text    :  󰒍        -> tous répondent
-               󰒍 3/4    -> 3 serveurs répondent sur 4 (classe « degraded »)
-               󰒍 0/4    -> plus rien ne répond (classe « down »)
-              (vide)    -> pas de serveur partagé configuré, Waybar masque
-                           le module (dépôt public : le montage est optionnel)
+    󰒍            tout va bien
+    󰒍 3/4        un serveur partagé (mcp-shared@<nom>) ne répond pas
+    󰒍 ·24        fan-out : 24 processus MCP stdio, un par session et par
+                 serveur — c'est ce qui a rempli la RAM le 2026-09-16
+                 (classe « fanout », seuil FANOUT_WARN)
+    󰒍 !          un serveur réclame une authentification (/mcp)
+    (vide)       ni serveur partagé, ni session Claude : module masqué
 
-Le tooltip détaille chaque serveur. L'état vient de `mcp-shared status
---json`, qui sonde chaque serveur actif par un `initialize` MCP : un proxy
-vivant dont le serveur est mort compte comme en panne. Rafraîchi toutes les
-30 s et sur SIGRTMIN+16 (envoyé par le popup après une action).
+Le tooltip détaille : chaque partagé (état, port, mémoire), le fan-out par
+serveur, les projets ouverts. Rafraîchi toutes les 30 s et sur SIGRTMIN+16
+(envoyé par le popup après une action). Les données viennent de mcp_data.py,
+le même module que le popup.
 """
 import json
 import os
-import shutil
-import subprocess
 import sys
 
-MCP_SHARED = os.path.expanduser("~/.local/bin/mcp-shared")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mcp_data as md  # noqa: E402
+from claude_sessions_data import load_sessions  # noqa: E402
+
 ICON = "\U000f048d"   # serveur en réseau
+FANOUT_WARN = 20
 
 STATE_LABELS = {
     "ok": "répond",
@@ -34,53 +36,68 @@ STATE_LABELS = {
 STATE_ICONS = {"ok": "", "starting": "", "failed": "", "down": ""}
 
 
-def load_status():
-    if not os.access(MCP_SHARED, os.X_OK) or shutil.which("systemctl") is None:
-        return None
-    try:
-        out = subprocess.run([MCP_SHARED, "status", "--json"], text=True,
-                             capture_output=True, timeout=25).stdout
-        return json.loads(out or "[]")
-    except Exception:
-        return None
-
-
-def build_tooltip(servers):
+def build_tooltip(shared, ov, sessions):
     lines = []
-    for s in servers:
-        state = s.get("state", "down")
-        mem = s.get("memory", 0) // 1048576
-        extra = f" — {mem} Mo" if state == "ok" and mem else ""
-        restarts = s.get("restarts", 0)
-        if restarts:
-            extra += f", {restarts} redémarrage{'s' if restarts > 1 else ''}"
-        lines.append(f"{STATE_ICONS.get(state, '')}  {s['name']} :{s['port']} — "
-                     f"{STATE_LABELS.get(state, state)}{extra}")
+    if shared:
+        lines.append("Partagés (mcp-shared)")
+        for s in shared:
+            state = s.get("state", "down")
+            mem = s.get("memory", 0) // 1048576
+            extra = f" — {mem} Mo" if state == "ok" and mem else ""
+            if s.get("restarts"):
+                extra += f", {s['restarts']} redémarrage{'s' if s['restarts'] > 1 else ''}"
+            lines.append(f"  {STATE_ICONS.get(state, '')}  {s['name']} :{s['port']} — "
+                         f"{STATE_LABELS.get(state, state)}{extra}")
+    if ov["stdio"]:
+        lines.append("")
+        lines.append(f"Stdio : {ov['stdio']} processus, {ov['stdio_rss_ko'] // 1024} Mo, "
+                     f"dans {ov['sessions']} sessions")
+        for name, n in sorted(ov["stdio_by_name"].items(), key=lambda kv: -kv[1]):
+            lines.append(f"  {name} ×{n}")
+    if ov["auth"]:
+        lines.append("")
+        lines.append("Auth requise : " + ", ".join(ov["auth"]))
+    cwds = sorted({os.path.basename(s.get("cwd") or "") for s in sessions} - {""})
+    if cwds:
+        lines.append("")
+        lines.append("Projets ouverts : " + ", ".join(cwds))
     lines.append("")
-    lines.append("clic : détail, journal, redémarrage")
+    lines.append("clic : serveurs par projet, journal, redémarrage")
     return "\n".join(lines)
 
 
 def main():
-    servers = load_status()
-    if not servers:
-        print(json.dumps({"text": "", "tooltip": "Aucun serveur MCP partagé"}))
+    sessions = load_sessions()
+    shared = md.shared_status()
+    if not shared and not sessions:
+        print(json.dumps({"text": "", "tooltip": "Aucun serveur MCP"}))
         return
+    ov = md.overview(sessions)
 
-    total = len(servers)
-    ok = sum(1 for s in servers if s.get("state") == "ok")
-    if ok == total:
-        text, cls = ICON, "ok"
-    elif ok == 0:
-        text, cls = f"{ICON} 0/{total}", "down"
-    else:
-        text, cls = f"{ICON} {ok}/{total}", "degraded"
+    classes = []
+    text = ICON
+    if shared:
+        ok = sum(1 for s in shared if s.get("state") == "ok")
+        if ok < len(shared):
+            text += f" {ok}/{len(shared)}"
+            classes.append("down" if ok == 0 else "degraded")
+    if ov["stdio"] >= FANOUT_WARN:
+        text += f" ·{ov['stdio']}"
+        classes.append("fanout")
+    # Un serveur de plugin qui réclame une auth ne mérite pas un point
+    # d'exclamation permanent dans la barre : on ne l'a pas forcément voulu.
+    # Le popup, lui, le montre.
+    if any(not n.startswith("plugin:") for n in ov["auth"]):
+        text += " !"
+        classes.append("auth")
+    if not classes:
+        classes.append("ok")
 
     print(json.dumps({
         "text": text,
-        "tooltip": build_tooltip(servers),
-        "class": cls,
-        "alt": cls,
+        "tooltip": build_tooltip(shared, ov, sessions),
+        "class": classes,
+        "alt": classes[0],
     }, ensure_ascii=False))
 
 

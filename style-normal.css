@@ -666,18 +666,24 @@ window#waybar {
     color: @ink;
 }
 
-/* Serveurs MCP partagés : « 󰒍 » quand tout répond, « 󰒍 2/4 » sinon — le
+/* Serveurs MCP : « 󰒍 » quand tout va bien ; « 󰒍 2/4 » si un partagé ne
+   répond pas, « 󰒍 ·24 » quand les processus stdio s'accumulent (un par
+   session et par serveur), « 󰒍 ! » quand un serveur réclame une auth — le
    même soulignement que l'attente Claude signale qu'il y a quelque chose à
    voir, en encre et non en couleur. */
 #custom-mcp,
 #custom-mcp.ok,
 #custom-mcp.degraded,
-#custom-mcp.down {
+#custom-mcp.down,
+#custom-mcp.fanout,
+#custom-mcp.auth {
     color: @ink;
 }
 
 #custom-mcp.degraded,
-#custom-mcp.down {
+#custom-mcp.down,
+#custom-mcp.fanout,
+#custom-mcp.auth {
     font-weight: 600;
     background-image: linear-gradient(to top, @ink 2px, transparent 2px);
 }
