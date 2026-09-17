@@ -100,6 +100,7 @@ window#waybar {
 #custom-zen,
 #custom-calendar,
 #custom-claude,
+#custom-mcp,
 #custom-dnd,
 #custom-power,
 #custom-recorder,
@@ -190,6 +191,7 @@ window#waybar {
 #custom-chrome:hover,
 #custom-zen:hover,
 #custom-claude:hover,
+#custom-mcp:hover,
 #custom-dnd:hover,
 #custom-power:hover,
 #custom-recorder:hover,
@@ -219,6 +221,7 @@ window#waybar {
 #custom-chrome:active,
 #custom-zen:active,
 #custom-claude:active,
+#custom-mcp:active,
 #custom-dnd:active,
 #custom-recorder:active,
 #custom-voice-rec:active,
@@ -397,6 +400,7 @@ window#waybar {
    reste malgré tout plus dense que la rangée d'icônes — c'est un paquet. */
 #custom-calendar,
 #custom-claude,
+#custom-mcp,
 #custom-dnd,
 #custom-updates,
 #systemd-failed-units {
@@ -660,6 +664,22 @@ window#waybar {
 #custom-claude.done,
 #custom-claude.waiting {
     color: @ink;
+}
+
+/* Serveurs MCP partagés : « 󰒍 » quand tout répond, « 󰒍 2/4 » sinon — le
+   même soulignement que l'attente Claude signale qu'il y a quelque chose à
+   voir, en encre et non en couleur. */
+#custom-mcp,
+#custom-mcp.ok,
+#custom-mcp.degraded,
+#custom-mcp.down {
+    color: @ink;
+}
+
+#custom-mcp.degraded,
+#custom-mcp.down {
+    font-weight: 600;
+    background-image: linear-gradient(to top, @ink 2px, transparent 2px);
 }
 
 #custom-claude.waiting {

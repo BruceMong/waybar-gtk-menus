@@ -104,6 +104,59 @@ cs_prune_stale() {
     return 0
 }
 
+# --- Un scope systemd par session -------------------------------------------
+# cgroup v2 facture la mémoire au cgroup où elle est allouée, et ne la suit
+# pas quand on déplace le processus. Pour qu'une session puisse être gelée et
+# poussée en swap (herdr-freeze, ALT+F : cgroup.freeze + memory.reclaim), il
+# faut donc qu'elle soit dans son scope AVANT d'allouer — d'où ce déplacement
+# au SessionStart, Claude et ses enfants déjà lancés compris, les MCP suivants
+# héritant du cgroup. Ce qui a été alloué avant ce hook (~150 Mo de base)
+# reste compté dans le scope du terminal : tant pis, l'essentiel — contexte,
+# MCP — vient après.
+#
+# Nom : claude-<pane herdr>.scope (w6:p2 → claude-w6-p2.scope), ou
+# claude-pid-<pid>.scope hors herdr. systemd-run exige un processus : un
+# `tail --pid` qui s'éteint avec Claude tient le scope, et l'emporte avec lui
+# — un `sleep infinity` laissait un scope et un sleep orphelins à chaque
+# `claude -p` de script. Idempotent : /clear, /compact et resume relancent le
+# hook sur un processus déjà placé.
+cs_scope() {
+    local unit dir p
+    [ -n "$CS_PID" ] && [ -d "/proc/$CS_PID" ] || return 0
+    grep -q '/claude-[^/]*\.scope$' "/proc/$CS_PID/cgroup" 2>/dev/null && return 0
+    command -v systemd-run >/dev/null 2>&1 || return 0
+
+    if [ -n "${HERDR_PANE_ID:-}" ]; then
+        unit="claude-$(printf '%s' "$HERDR_PANE_ID" | tr ':' '-')"
+    else
+        unit="claude-pid-$CS_PID"
+    fi
+    dir="$(cs_scope_dir "$unit")"
+    if [ -z "$dir" ]; then
+        systemd-run --user --scope --unit "$unit" --quiet \
+            tail --pid="$CS_PID" -s 10 -f /dev/null >/dev/null 2>&1 &
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+            dir="$(cs_scope_dir "$unit")"; [ -n "$dir" ] && break; sleep 0.2
+        done
+        [ -n "$dir" ] || return 0
+    fi
+    for p in $(cs_tree "$CS_PID"); do
+        echo "$p" > "$dir/cgroup.procs" 2>/dev/null
+    done
+    return 0
+}
+
+cs_scope_dir() {
+    find "/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service" \
+         -maxdepth 2 -type d -name "$1.scope" 2>/dev/null | head -1
+}
+
+cs_tree() {
+    local c
+    echo "$1"
+    for c in $(pgrep -P "$1" 2>/dev/null); do cs_tree "$c"; done
+}
+
 # --- Rafraîchissement immédiat de la barre ---------------------------------
 # SIGRTMIN+11 : signal dédié au module custom/claude (voir config-active).
 cs_refresh_waybar() {

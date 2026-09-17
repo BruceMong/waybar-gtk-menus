@@ -14,7 +14,7 @@ import subprocess
 
 # menu_common fixe lui-même la version de GTK et fournit tout ce qui sert
 # ici : ce popup n'a plus une seule ligne de widget à écrire à la main.
-from menu_common import LayerPopup, run_popup
+from menu_common import GLib, Gtk, LayerPopup, run_popup
 
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 DND_TOGGLE = os.path.join(CONFIG_DIR, "dnd-toggle.sh")
@@ -29,6 +29,11 @@ SOUND_FLAG = os.path.join(CONFIG_DIR, "notif-sound.enabled")
 # qui régénère la config swaync et la fait recharger.
 COMPACT_FLAG = os.path.join(CONFIG_DIR, "notif-compact.enabled")
 COMPACT_TOGGLE = os.path.join(CONFIG_DIR, "notif-compact.sh")
+# Opacité des surfaces de swaync, en pourcent. Même script : il réécrit le
+# bloc généré de style-active.css et demande à swaync de relire son CSS.
+# Fichier absent = 72 %, l'alpha écrit en dur dans style.css.
+OPACITY_FILE = os.path.join(CONFIG_DIR, "notif-opacity")
+DEFAULT_OPACITY = 72
 # État de session : $XDG_RUNTIME_DIR est privé à l'utilisateur et vidé à la
 # déconnexion, là où /tmp est partagé entre comptes et survit à la session.
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
@@ -49,12 +54,14 @@ class NotificationPopup(LayerPopup):
     IC_TIMER = "\U000f051b"    # minuteur
     IC_SOUND = "\U000f057e"    # haut-parleur
     IC_COMPACT = "\U000f084c"  # flèches qui se resserrent
+    IC_OPACITY = "\U000f05cc"  # gouttes superposées (opacité)
     IC_CLAUDE = "\U000f09d1"   # cerveau
     IC_CENTER = "\U000f009a"   # cloche
     IC_CLEAR = "\U000f01b4"    # balai
 
     def __init__(self):
         super().__init__("Notifications", width=340, margin_right=360)
+        self._opacity_timeout_id = None
 
         dnd = self.add_card()
         self.switch_dnd = dnd.toggle(self.IC_DND, "Ne pas déranger",
@@ -71,7 +78,23 @@ class NotificationPopup(LayerPopup):
                      os.path.exists(SOUND_FLAG), self._on_sound_toggled)
         prefs.toggle(self.IC_COMPACT, "Notifications discrètes",
                      os.path.exists(COMPACT_FLAG), self._on_compact_toggled,
-                     subtitle="cartes moins larges")
+                     subtitle="cartes plus étroites, texte plus petit")
+        # Le curseur suit l'interrupteur : les deux règlent l'encombrement
+        # d'une notification à l'écran, l'un sa taille, l'autre sa présence.
+        opacity = self._read_opacity()
+        self.scale_opacity = Gtk.Scale.new_with_range(
+            Gtk.Orientation.HORIZONTAL, 30, 100, 5)
+        self.scale_opacity.set_value(opacity)
+        self.scale_opacity.set_draw_value(False)
+        _row, self.lbl_opacity = prefs.slider(
+            self.IC_OPACITY, "Opacité", self.scale_opacity, "%d %%" % opacity)
+        self.scale_opacity.connect("value-changed", self._on_opacity_changed)
+        # Un aperçu par déplacement, pas un par pixel : le CSS se recharge en
+        # continu pendant le glissé, mais la notification-témoin — la seule
+        # chose qui rende le réglage visible quand la pile est vide — n'est
+        # envoyée qu'au relâchement.
+        self.scale_opacity.connect("button-release-event", self._preview_opacity)
+        self.scale_opacity.connect("key-release-event", self._preview_opacity)
         # Actif tant que le drapeau « disabled » est absent. L'ancien libellé
         # « Notif Claude → fenêtre » laissait croire qu'il ne réglait que le
         # clic vers la fenêtre, alors qu'il coupe les notifications elles-mêmes.
@@ -161,6 +184,38 @@ class NotificationPopup(LayerPopup):
                        stdout=DEVNULL, stderr=DEVNULL)
         subprocess.Popen(["notify-send", "-a", "swaync", "Notifications discrètes",
                           "Activées" if switch.get_active() else "Désactivées"])
+
+    def _read_opacity(self):
+        try:
+            value = int(open(OPACITY_FILE).read().strip())
+        except Exception:
+            return DEFAULT_OPACITY
+        return min(100, max(30, value))
+
+    def _on_opacity_changed(self, scale):
+        # Debounce : le CSS est régénéré et relu par swaync à chaque appel,
+        # inutile de le faire à chaque pixel du glissé.
+        if self._opacity_timeout_id:
+            GLib.source_remove(self._opacity_timeout_id)
+        value = int(scale.get_value())
+        self.lbl_opacity.set_text("%d %%" % value)
+        self._opacity_timeout_id = GLib.timeout_add(
+            120, self._apply_opacity, value)
+
+    def _apply_opacity(self, value):
+        self._opacity_timeout_id = None
+        subprocess.Popen([COMPACT_TOGGLE, "opacity", str(value)],
+                         stdout=DEVNULL, stderr=DEVNULL)
+        return False
+
+    def _preview_opacity(self, _widget, _event):
+        value = int(self.scale_opacity.get_value())
+        # -r : une seule notification-témoin, remplacée à chaque essai, plutôt
+        # qu'une pile qui grandit à mesure qu'on cherche la bonne valeur.
+        subprocess.Popen(["notify-send", "-a", "swaync", "-r", "9911",
+                          "Opacité des notifications", "%d %%" % value],
+                         stdout=DEVNULL, stderr=DEVNULL)
+        return False
 
     def _on_claude_toggled(self, switch, _param):
         # actif (switch on) = drapeau "disabled" absent

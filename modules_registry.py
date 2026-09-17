@@ -90,6 +90,8 @@ MODULES = [
            _script("calendar-menu.py"), transient=True),
     Module(["custom/claude"], "\U000f09d1", "Sessions Claude",
            _script("claude-menu.py"), transient=True),
+    Module(["custom/mcp"], "\U000f048d", "Serveurs MCP",
+           _script("mcp-menu.py"), transient=True),
     Module(["custom/dnd"], "\U000f009a", "Notifications",
            _script("notification-menu.py")),
     Module(["custom/updates"], "\U000f03d7", "Mises à jour",

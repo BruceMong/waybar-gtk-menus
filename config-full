@@ -52,7 +52,7 @@
     },
     "group/status": {
         "orientation": "inherit",
-        "modules": ["custom/calendar", "custom/claude", "custom/dnd", "custom/updates", "systemd-failed-units"]
+        "modules": ["custom/calendar", "custom/claude", "custom/mcp", "custom/dnd", "custom/updates", "systemd-failed-units"]
     },
     "group/system": {
         "orientation": "inherit",
@@ -391,6 +391,15 @@
         "interval": 10,
         "signal": 11,
         "on-click": "~/.config/waybar/claude-menu.py"
+    },
+
+    "custom/mcp": {
+        "format": "{}",
+        "return-type": "json",
+        "exec": "~/.config/waybar/mcp-status.py",
+        "interval": 30,
+        "signal": 16,
+        "on-click": "~/.config/waybar/mcp-menu.py"
     },
 
     "custom/recorder": {

@@ -10,11 +10,16 @@
 # précédente : son pid restant vivant, rien ne le purgeait et le menu Waybar
 # continuait d'afficher une conversation qui n'existe plus. cs_write purge les
 # autres états du même pid, ce qui suffit à faire disparaître l'ancienne.
+#
+# cs_scope met ensuite la session dans son propre scope systemd, dès le
+# démarrage : c'est ce qui permet à ~/.local/bin/herdr-freeze (ALT+F) de la
+# geler ET de rendre sa mémoire, cf. claude-session-lib.sh.
 
 source "$HOME/.claude/hooks/claude-session-lib.sh"
 
 payload="$(cat)"
 cs_resolve
 cs_write idle "$payload" "Session prête"
+cs_scope
 
 exit 0
