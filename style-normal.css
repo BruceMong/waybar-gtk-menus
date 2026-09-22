@@ -20,21 +20,19 @@
       moitiés vont ensemble.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Encre : hiérarchie par opacité ── */
-@define-color ink   #ebebf0;  /* primaire   — valeurs, icônes actives */
-@define-color ink2  #9a9aa2;  /* secondaire — libellés, contexte */
-@define-color ink3  #68686f;  /* tertiaire  — inactif, désactivé */
-@define-color inkSel #ffffff; /* sélection  — blanc pur, un cran au-dessus
-                                 de @ink : réservé à ce qui est actif */
+/* ── Palette ──
+   Les valeurs vivent dans tokens.py et sont écrites ici par
+   generate-tokens.py. Elles ne sont plus déclarées dans cette feuille : cinq
+   surfaces de la config les redéclaraient chacune de son côté, et leurs
+   opacités avaient fini par diverger sans que rien ne puisse le montrer.
+   Vocabulaire : @ink / @ink2 / @ink3 pour l'encre, @fill* pour les
+   remplissages, @sys* pour les couleurs système. */
+@import url("tokens.css");
 
-/* ── Remplissages (survol / sélection) ── */
-@define-color fill     rgba(255, 255, 255, 0.10);
-@define-color fillHard rgba(255, 255, 255, 0.17);
-
-/* ── Couleurs système Apple (dark mode) — usage réservé aux anomalies ── */
-@define-color sysRed    #ff453a;
-@define-color sysOrange #ff9f0a;
-@define-color sysBlue   #0a84ff;
+/* Alias local : cette feuille appelle « inkSel » le blanc pur réservé à ce qui
+   est actif. Le nom partagé est @onAccent (texte posé sur un aplat d'accent) —
+   même valeur, deux lectures. */
+@define-color inkSel @onAccent;
 
 * {
     /* SF Pro Text en tête (paquet AUR `otf-san-francisco`) : la police
@@ -74,9 +72,9 @@
    Le hairline du bas remplace la bordure — une menu bar système ne « flotte »
    pas, elle se termine sur une ligne d'un pixel. */
 window#waybar {
-    background-color: rgba(30, 30, 32, 0.52);
+    background-color: @barBg;
     color: @ink;
-    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.07);
+    box-shadow: inset 0 -1px 0 @fillFaint;
 }
 
 /* ═══ Modules de premier niveau ═══
@@ -235,7 +233,7 @@ window#waybar {
 }
 
 #custom-power:active {
-    background-color: rgba(255, 69, 58, 0.28);
+    background-color: @redWash;
     color: @sysRed;
 }
 
@@ -246,7 +244,7 @@ window#waybar {
 .audio-drawer,
 .tools-drawer,
 .tray-drawer {
-    background-color: rgba(255, 255, 255, 0.07);
+    background-color: @fillFaint;
     border-radius: 7px;
 }
 
@@ -749,7 +747,7 @@ window#waybar {
 }
 
 #custom-power:hover {
-    background-color: rgba(255, 69, 58, 0.20);
+    background-color: @redWashSoft;
     color: @sysRed;
 }
 
@@ -759,7 +757,7 @@ window#waybar {
 }
 
 #tray menu {
-    background-color: rgba(38, 38, 40, 0.98);
+    background-color: @tooltipBg;
     color: @ink;
     border-radius: 8px;
 }

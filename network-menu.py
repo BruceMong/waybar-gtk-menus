@@ -265,6 +265,13 @@ class NetworkPopup(LayerPopup):
     IC_LOCK = "\U000f0341"      # cadenas
     IC_WIRED = "\U000f0200"     # prise réseau
     IC_VPN = "\U000f0582"       # tunnel chiffré
+    # Les trois glyphes ont été RENDUS avant d'être retenus, hors interface :
+    # les deux premiers choisis au jugé sortaient en « boîte avec un plus » et
+    # en haut-parleur barré. Un codepoint Material Design ne se devine pas à
+    # son voisinage.
+    IC_RATE = "\U000f04e2"      # flèches haut/bas : le trafic qui passe
+    IC_PING = "\U000f051b"      # chronomètre : le temps d'aller-retour
+    IC_SPEED = "\U000f04c5"     # compteur de vitesse
 
     def __init__(self):
         super().__init__("Wi-Fi", width=360, margin_right=110)
@@ -353,6 +360,22 @@ class NetworkPopup(LayerPopup):
         self.pw_box.pack_start(pw_btns, False, False, 0)
         self.box.pack_start(self.pw_box, False, False, 0)
 
+        # -- Mesures --
+        # Ce que le menu ne disait pas : si ça passe, et à quelle vitesse. On
+        # voyait le réseau auquel on était relié, jamais ce qu'il valait — donc
+        # au moindre doute on ouvrait un terminal pour un ping, ce qui est
+        # exactement le geste qu'un panneau est censé éviter.
+        #
+        # Trois lignes, du moins cher au plus cher : le débit se lit dans le
+        # sysfs (gratuit, rafraîchi chaque seconde), la latence coûte un ping
+        # (une fois à l'ouverture), le test de vitesse télécharge pour de vrai
+        # et ne part donc que sur demande.
+        meas = self.add_card("Mesures")
+        self.rate_row = meas.info(self.IC_RATE, "Débit", value="—")
+        self.ping_row = meas.info(self.IC_PING, "Latence", value="—")
+        self.speed_row = meas.action(self.IC_SPEED, "Test de vitesse",
+                                     value="", on_click=self._on_speedtest)
+
         # -- Rafraîchir et outils --
         tools = self.add_card()
         self.refresh_row = tools.action(self.IC_REFRESH, "Rafraîchir",
@@ -378,6 +401,14 @@ class NetworkPopup(LayerPopup):
         self._start_scan(rescan=False, first=True, quiet=True, then_rescan=True)
         GLib.timeout_add_seconds(POLL_SECONDS, self._on_poll)
 
+        # Mesures : une première lecture immédiate pour amorcer le compteur de
+        # débit (qui est une différence, donc muet au premier passage), puis
+        # une par seconde.
+        self._rate_prev = None
+        self._rate_tick()
+        GLib.timeout_add_seconds(1, self._rate_tick)
+        self._start_ping()
+
     # ---- Plomberie thread ----
 
     def _on_destroy(self, *_):
@@ -397,6 +428,140 @@ class NetworkPopup(LayerPopup):
         if not self._closed:
             done(res)
         return False
+
+    # ---- Mesures ----
+
+    @staticmethod
+    def _default_iface():
+        """L'interface qui porte la route par défaut, lue dans /proc.
+
+        Et non `ip route show default` : cette fonction est appelée une fois
+        par seconde tant que le menu est ouvert, et lancer un processus à cette
+        cadence pour trois lignes de texte est un coût qu'on ne paie pas. La
+        route par défaut est celle dont la destination vaut 0.0.0.0, soit
+        « 00000000 » dans la table hexadécimale du noyau.
+        """
+        try:
+            with open("/proc/net/route", encoding="utf-8") as fh:
+                next(fh, None)
+                for line in fh:
+                    champs = line.split()
+                    if len(champs) > 1 and champs[1] == "00000000":
+                        return champs[0]
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def _octets(iface):
+        """(reçus, émis) en octets, ou None si l'interface a disparu."""
+        base = "/sys/class/net/%s/statistics/" % iface
+        try:
+            with open(base + "rx_bytes", encoding="utf-8") as fh:
+                rx = int(fh.read())
+            with open(base + "tx_bytes", encoding="utf-8") as fh:
+                tx = int(fh.read())
+            return rx, tx
+        except Exception:
+            return None
+
+    @staticmethod
+    def _debit(octets_par_seconde):
+        """Unité adaptée : un menu qui affiche « 0.00 Mo/s » n'informe pas."""
+        v = octets_par_seconde
+        if v < 1024:
+            return "%d o/s" % v
+        if v < 1024 * 1024:
+            return "%.0f ko/s" % (v / 1024)
+        return "%.1f Mo/s" % (v / 1048576)
+
+    def _rate_tick(self):
+        """Débit instantané. Rendu par différence entre deux lectures."""
+        if self._closed:
+            return False
+        iface = self._default_iface()
+        if not iface:
+            self.rate_row.value_label.set_text("hors ligne")
+            self._rate_prev = None
+            return True
+        maintenant = self._octets(iface)
+        if maintenant is None:
+            self._rate_prev = None
+            return True
+        t = time.monotonic()
+        precedent = self._rate_prev
+        self._rate_prev = (iface, maintenant, t)
+        # Premier passage, ou interface changée en cours de route (Wi-Fi ->
+        # ethernet) : les compteurs ne sont pas comparables, on repart de zéro
+        # plutôt que d'afficher un pic de plusieurs gigaoctets par seconde.
+        if precedent is None or precedent[0] != iface:
+            return True
+        dt = t - precedent[2]
+        if dt <= 0:
+            return True
+        rx = max(0, maintenant[0] - precedent[1][0]) / dt
+        tx = max(0, maintenant[1] - precedent[1][1]) / dt
+        self.rate_row.value_label.set_text(
+            "\u2193 %s   \u2191 %s" % (self._debit(rx), self._debit(tx)))
+        return True
+
+    def _start_ping(self):
+        """Latence vers le résolveur de Cloudflare, une fois, hors boucle GTK.
+
+        1.1.1.1 plutôt que la passerelle : ce qu'on veut savoir en ouvrant ce
+        menu, c'est si Internet répond, pas si le routeur du salon répond.
+        """
+        def work():
+            try:
+                out = subprocess.check_output(
+                    ["ping", "-c", "1", "-W", "2", "1.1.1.1"],
+                    text=True, stderr=DEVNULL, timeout=4)
+                m = re.search(r"time=([0-9.]+)", out)
+                return "%.0f ms" % float(m.group(1)) if m else "—"
+            except Exception:
+                return "pas de réponse"
+
+        def done(res):
+            self.ping_row.value_label.set_text(
+                res if isinstance(res, str) else "—")
+
+        self._in_thread(work, done)
+
+    def _on_speedtest(self, *_):
+        """Téléchargement réel, sur demande seulement.
+
+        25 Mo depuis l'endpoint public de Cloudflare — aucun paquet à
+        installer, et `curl` rend le débit qu'il a mesuré, ce qui évite de
+        chronométrer soi-même. Le test n'est PAS lancé à l'ouverture du menu :
+        il consomme du forfait, ce qu'un panneau n'a pas à faire dans le dos de
+        celui qui l'ouvre.
+        """
+        if getattr(self, "_speed_busy", False):
+            return
+        self._speed_busy = True
+        self.speed_row.value_label.set_text("mesure…")
+
+        def work():
+            try:
+                out = subprocess.check_output(
+                    ["curl", "-s", "--max-time", "20", "-o", "/dev/null",
+                     "-w", "%{speed_download}",
+                     "https://speed.cloudflare.com/__down?bytes=25000000"],
+                    text=True, stderr=DEVNULL, timeout=25)
+                octets = float(out.strip() or 0)
+                if octets <= 0:
+                    return "échec"
+                # En mégabits par seconde : c'est l'unité des abonnements, donc
+                # la seule que le résultat permette de comparer à quelque chose.
+                return "%.0f Mb/s" % (octets * 8 / 1_000_000)
+            except Exception:
+                return "échec"
+
+        def done(res):
+            self._speed_busy = False
+            self.speed_row.value_label.set_text(res if isinstance(res, str) else "échec")
+
+        self._in_thread(work, done)
 
     # ---- Bandeau d'état ----
 

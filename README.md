@@ -406,6 +406,9 @@ container, hence its Google session.
 | `menu_common.py` | shared GTK layer-shell popup base — all menus build on it |
 | `modules_registry.py` | single inventory of the bar's modules, shared by the eye menu and the `⋮` menu |
 | `generate-config.py` | `config-full` → `config-active` |
+| `tokens.py` | the palette, as named Python constants — single source of truth |
+| `generate-tokens.py` | writes `tokens.css` (`@define-color`) next to every stylesheet that imports it |
+| `memory-cgroups.sh` | who eats the memory, per cgroup (RAM + swap) — what `ps` cannot tell you |
 | `autofit.py` | folds modules away when the bar overflows |
 | `calendar_agenda.py` | Google Calendar: OAuth, sync, reminders, module JSON |
 | `chrome-open.py` | opens an URL in a given Chrome profile, on a given workspace |

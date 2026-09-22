@@ -56,14 +56,49 @@ YELLOW = "#ffd60a"
 PURPLE = "#bf5af2"
 
 # ── Matériaux ──────────────────────────────────────────────────────────────
-# Le flou vient du compositeur (blocs `layerrule` de la config Hyprland), jamais du
-# CSS : GTK3 n'a pas de backdrop-filter. Ces valeurs ne sont que la teinte
+# Le flou vient du compositeur (blocs `layerrule` de la config Hyprland), jamais
+# du CSS : GTK3 n'a pas de backdrop-filter. Ces valeurs ne sont que la teinte
 # posée par-dessus.
-WINDOW_BG = "rgba(28, 28, 30, 0.74)"   # popups
-BAR_BG = "rgba(30, 30, 32, 0.52)"      # la barre elle-même, plus légère
+#
+# DEUX surfaces, et deux seulement, depuis le 2026-09-23 :
+#
+#   · `surface` — tout ce qui se POSE sur le contenu : popups de la barre,
+#     cartes et panneau de swaync, HUD, lanceur, palette de commandes ;
+#   · `barBg` — la barre elle-même, plus légère parce qu'elle BORDE l'écran
+#     au lieu de se poser dessus. Un élément posé par-dessus doit être plus
+#     dense que celui qui longe le bord, sinon on ne sait plus lequel est au
+#     premier plan.
+#
+# Il y en avait cinq, nées chacune dans sa feuille : 0.72 pour les cartes
+# swaync, le HUD et le lanceur, 0.74 pour les popups de la barre, 0.76 pour la
+# palette, sur deux teintes voisines (28,28,30 et 30,30,32) que l'œil ne
+# distingue pas. La valeur retenue est la majoritaire.
+#
+# Le fond du centre de notifications et les cartes qui s'y posent partagent
+# désormais cette surface : leur écart n'était que de deux points de teinte,
+# donc le relief ne venait de toute façon pas de là mais des remplissages
+# blancs ci-dessous.
+SURFACE = "rgba(30, 30, 32, 0.72)"
+BAR_BG = "rgba(30, 30, 32, 0.52)"
+
+# ── Remplissages ───────────────────────────────────────────────────────────
+# Quatre rôles, une valeur chacun. Il y avait neuf valeurs pour ces quatre
+# rôles — 0.06 et 0.07 pour le même liseré, 0.09 et 0.10 pour le même survol,
+# 0.16, 0.17 et 0.22 pour la même sélection — parce que chaque feuille avait
+# choisi la sienne sans voir les autres.
+FILL_FAINT = "rgba(255, 255, 255, 0.07)"   # liseré, séparateur, ligne au repos
+FILL = "rgba(255, 255, 255, 0.10)"         # survol
+FILL_MID = "rgba(255, 255, 255, 0.14)"     # bordure d'une surface
+FILL_HARD = "rgba(255, 255, 255, 0.17)"    # appui, sélection
+FILL_STRONG = "rgba(255, 255, 255, 0.28)"  # poignée d'ascenseur : une commande
+                                           # qu'on saisit, pas une surface
+
 HAIRLINE = "rgba(255, 255, 255, 0.13)"  # bordure spéculaire d'un pixel
-FILL = "rgba(255, 255, 255, 0.10)"      # survol
-FILL_HARD = "rgba(255, 255, 255, 0.17)"  # appui / sélection
+TOOLTIP_BG = "rgba(38, 38, 40, 0.98)"   # infobulle : opaque, elle n'est pas
+                                        # floutée par le compositeur
+ACCENT_DIM = "rgba(10, 132, 255, 0.20)"    # aplat d'accent très dilué
+RED_WASH = "rgba(255, 69, 58, 0.28)"       # aplat d'alerte (batterie critique)
+RED_WASH_SOFT = "rgba(255, 69, 58, 0.20)"
 
 
 def css_vars():
@@ -80,7 +115,11 @@ def css_vars():
         ("sysRed", RED), ("sysRedHover", RED_HOVER),
         ("sysGreen", GREEN), ("sysOrange", ORANGE),
         ("sysYellow", YELLOW), ("sysPurple", PURPLE),
-        ("windowBg", WINDOW_BG), ("barBg", BAR_BG),
-        ("hairline", HAIRLINE), ("fill", FILL), ("fillHard", FILL_HARD),
+        ("surface", SURFACE), ("barBg", BAR_BG),
+        ("hairline", HAIRLINE), ("tooltipBg", TOOLTIP_BG),
+        ("fillFaint", FILL_FAINT), ("fill", FILL), ("fillMid", FILL_MID),
+        ("fillHard", FILL_HARD), ("fillStrong", FILL_STRONG),
+        ("accentDim", ACCENT_DIM),
+        ("redWash", RED_WASH), ("redWashSoft", RED_WASH_SOFT),
     ]
     return "\n".join("@define-color %s %s;" % (n, v) for n, v in pairs)

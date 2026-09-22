@@ -1,0 +1,31 @@
+/* ══ FICHIER GÉNÉRÉ — ne pas éditer ══════════════════════════════════════
+   Source : ~/.config/waybar/tokens.py
+   Régénérer : ~/.config/waybar/generate-tokens.py
+   Toute modification faite ici est perdue à la prochaine génération.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@define-color ink #ebebf0;
+@define-color ink2 #9a9aa2;
+@define-color ink3 #68686f;
+@define-color onAccent #ffffff;
+@define-color sysBlue #0a84ff;
+@define-color sysBlueText #5e9cff;
+@define-color sysBlueHover #409cff;
+@define-color sysRed #ff453a;
+@define-color sysRedHover #ff6961;
+@define-color sysGreen #32d74b;
+@define-color sysOrange #ff9f0a;
+@define-color sysYellow #ffd60a;
+@define-color sysPurple #bf5af2;
+@define-color surface rgba(30, 30, 32, 0.72);
+@define-color barBg rgba(30, 30, 32, 0.52);
+@define-color hairline rgba(255, 255, 255, 0.13);
+@define-color tooltipBg rgba(38, 38, 40, 0.98);
+@define-color fillFaint rgba(255, 255, 255, 0.07);
+@define-color fill rgba(255, 255, 255, 0.10);
+@define-color fillMid rgba(255, 255, 255, 0.14);
+@define-color fillHard rgba(255, 255, 255, 0.17);
+@define-color fillStrong rgba(255, 255, 255, 0.28);
+@define-color accentDim rgba(10, 132, 255, 0.20);
+@define-color redWash rgba(255, 69, 58, 0.28);
+@define-color redWashSoft rgba(255, 69, 58, 0.20);

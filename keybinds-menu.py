@@ -138,12 +138,6 @@ SUGGESTIONS = [
      "label": "Sélecteur de fenêtres (Walker)",
      "line": 'hl.bind(mainMod .. " + SHIFT + Tab", hl.dsp.exec_cmd("walker -m windows"))'},
     # -- workspaces
-    {"mods": ["SUPER"], "key": "next",
-     "label": "Workspace suivant (au clavier)",
-     "line": 'hl.bind(mainMod .. " + next", hl.dsp.focus({ workspace = "e+1" }))'},
-    {"mods": ["SUPER"], "key": "prior",
-     "label": "Workspace précédent (au clavier)",
-     "line": 'hl.bind(mainMod .. " + prior", hl.dsp.focus({ workspace = "e-1" }))'},
     {"mods": ["SUPER", "SHIFT"], "key": "next",
      "label": "Envoyer la fenêtre au workspace suivant",
      "line": 'hl.bind(mainMod .. " + SHIFT + next", hl.dsp.window.move({ workspace = "e+1" }))'},
