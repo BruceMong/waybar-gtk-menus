@@ -126,8 +126,20 @@ cs_prune_stale() {
 # terminal (constaté le 2026-09-17 : quatre @stripe/mcp de 200 Mo facturés au
 # scope kitty d'herdr, que memory.reclaim ne pouvait donc pas évacuer au gel).
 # Quand Claude est déjà dans son scope, on ne fait que rapatrier l'arbre.
+#
+# Ordre d'arrêt : le scope est créé `Before=` l'unité du terminal (le scope
+# kitty qui héberge le serveur herdr), donc il s'arrête APRÈS elle. Sans ça,
+# systemd envoie SIGTERM à tout le monde en même temps à l'arrêt de la
+# session ; Claude quitte en ~2 s, herdr survit ~4 s et persiste des panes
+# redevenus de simples shells — au redémarrage il ne relançait que les
+# sessions gelées, seules à avoir ignoré le SIGTERM (constaté le 2026-09-22,
+# 15 sessions sur 20 à reprendre à la main). Sur SIGTERM, herdr sauve son état
+# AVANT de fermer ses ptys (vérifié sur une session nommée) : reçu en premier,
+# il enregistre chaque Claude encore vivant et le reprend au démarrage
+# suivant. `set-property` refuse Before= sur un scope existant : ça ne se pose
+# qu'à la création, une session lancée avant ce hook n'est donc pas couverte.
 cs_scope() {
-    local unit dir p
+    local unit dir p term
     [ -n "$CS_PID" ] && [ -d "/proc/$CS_PID" ] || return 0
     command -v systemd-run >/dev/null 2>&1 || return 0
 
@@ -141,7 +153,11 @@ cs_scope() {
     fi
     dir="$(cs_scope_dir "$unit")"
     if [ -z "$dir" ]; then
+        # Claude n'a pas encore été déplacé : son cgroup est celui du terminal.
+        term="$(sed -n 's#^0::/user\.slice/[^/]*/user@[0-9]*\.service/[a-z]*\.slice/\([^/]*\.\(scope\|service\)\).*#\1#p' \
+                "/proc/$CS_PID/cgroup" 2>/dev/null | head -1)"
         systemd-run --user --scope --unit "$unit" --quiet \
+            ${term:+-p "Before=$term"} \
             tail --pid="$CS_PID" -s 10 -f /dev/null >/dev/null 2>&1 &
         for _ in 1 2 3 4 5 6 7 8 9 10; do
             dir="$(cs_scope_dir "$unit")"; [ -n "$dir" ] && break; sleep 0.2
