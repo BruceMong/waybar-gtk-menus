@@ -33,6 +33,7 @@ Ce module ne dépend de rien : il est importable depuis n'importe quel script
 de menu, et `generate-tokens.py` s'en sert pour écrire la feuille CSS que
 consomment la barre et les popups.
 """
+import re
 
 # ── Encre : hiérarchie par opacité, jamais par teinte ──────────────────────
 INK = "#ebebf0"   # primaire   — valeurs, icônes actives, libellés de ligne
@@ -100,6 +101,61 @@ ACCENT_DIM = "rgba(10, 132, 255, 0.20)"    # aplat d'accent très dilué
 RED_WASH = "rgba(255, 69, 58, 0.28)"       # aplat d'alerte (batterie critique)
 RED_WASH_SOFT = "rgba(255, 69, 58, 0.20)"
 
+# ── Surfaces OPAQUES ───────────────────────────────────────────────────────
+# Les surfaces ci-dessus sont translucides : le compositeur floute ce qui est
+# derrière. Trois consommateurs n'ont pas cette chance — un terminal, un écran
+# de verrouillage et le style Fusion de Qt composent sur de l'opaque. Il leur
+# faut donc la même rampe, mais aplatie.
+#
+# Elle était jusqu'ici recopiée dans `kitty/current-theme.conf` et
+# `qt6ct/colors/macos-dark.conf`, sans nom et sans lien avec le reste : c'est
+# précisément ce que ce module existe pour empêcher.
+#
+# `BASE` est l'opaque de `SURFACE` — mêmes 30, 30, 32. `TERMINAL_BG` vaut
+# 28, 28, 30 : c'est l'autre teinte, celle que le ménage du 2026-09-23 a
+# écartée côté CSS sans toucher au terminal. Les deux sont gardées telles
+# quelles pour que la centralisation ne change aucun pixel ; les unifier est
+# désormais la suppression d'une ligne, et l'écart est invisible à l'œil.
+SUNKEN = "#141416"       # creux : ombre portée, enfoncement
+TERMINAL_BG = "#1c1c1e"  # fond du terminal
+BASE = "#1e1e20"         # fond de fenêtre — l'opaque de SURFACE
+RAISED = "#242426"       # ligne alternée d'une liste
+RAISED_OFF = "#262628"   # la même, désactivée
+FIELD = "#2c2c2e"        # champ de saisie, onglet actif, zone de texte
+CONTROL = "#38383a"      # bouton, contrôle
+CONTROL_HOVER = "#3a3a3c"
+EDGE = "#48484a"         # bordure d'un élément actif
+BLACK = "#000000"        # ombre portée pure — pas une encre
+
+# ── Variantes vives ────────────────────────────────────────────────────────
+# Un terminal a besoin de SEIZE couleurs, pas de six : chaque accent système
+# a une variante vive. `RED_HOVER` et `BLUE_HOVER` en tiennent déjà lieu pour
+# le rouge et le bleu — un survol est exactement « le même ton, un cran plus
+# clair », donc la même valeur sert aux deux emplois.
+GREEN_BRIGHT = "#30db5b"
+YELLOW_BRIGHT = "#ffe14d"
+PURPLE_BRIGHT = "#da8fff"
+CYAN = "#5ac8f5"         # le cyan n'a pas d'emploi d'état : il n'existe que
+CYAN_BRIGHT = "#70d7ff"  # parce que la table ANSI en réclame un
+WHITE = "#d8d8dd"        # blanc ANSI — entre INK2 et INK, pas un quatrième
+                         # niveau d'encre
+
+
+def rgba_parts(v):
+    """Rend (r, g, b, a) d'une chaîne `rgba(r, g, b, a)` ou `rgb(r, g, b)`."""
+    nombres = re.findall(r"[0-9.]+", v)
+    r, g, b = (int(n) for n in nombres[:3])
+    a = float(nombres[3]) if len(nombres) > 3 else 1.0
+    return r, g, b, a
+
+
+def argb(v):
+    """Rend `#aarrggbb` — la forme qu'attend qt6ct, alpha en tête."""
+    if v.startswith("#"):
+        return "#ff" + v[1:]
+    r, g, b, a = rgba_parts(v)
+    return "#%02x%02x%02x%02x" % (round(a * 255), r, g, b)
+
 
 def css_vars():
     """Palette sous forme de déclarations `@define-color` GTK.
@@ -123,3 +179,20 @@ def css_vars():
         ("redWash", RED_WASH), ("redWashSoft", RED_WASH_SOFT),
     ]
     return "\n".join("@define-color %s %s;" % (n, v) for n, v in pairs)
+
+
+def rgb_parts(v):
+    """Rend (r, g, b) d'un `#rrggbb` comme d'un `rgba(...)`."""
+    if v.startswith("#"):
+        return tuple(int(v[i:i + 2], 16) for i in (1, 3, 5))
+    return rgba_parts(v)[:3]
+
+
+def rgba(v, a):
+    """Reteinte : la couleur `v`, posée à l'opacité `a`.
+
+    `a` est une CHAÎNE (« 0.9 », « 1.0 ») et non un flottant : les fichiers
+    générés doivent rester comparables octet pour octet à ce qu'ils
+    remplacent, et `0.9` ne s'écrit pas tout seul `0.90`.
+    """
+    return "rgba(%d, %d, %d, %s)" % (rgb_parts(v) + (a,))
