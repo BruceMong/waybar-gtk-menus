@@ -107,7 +107,7 @@ cs_prune_stale() {
 # --- Un scope systemd par session -------------------------------------------
 # cgroup v2 facture la mémoire au cgroup où elle est allouée, et ne la suit
 # pas quand on déplace le processus. Pour qu'une session puisse être gelée et
-# poussée en swap (herdr-freeze, ALT+F : cgroup.freeze + memory.reclaim), il
+# poussée en swap (herdr-freeze, ALT+G : cgroup.freeze + memory.reclaim), il
 # faut donc qu'elle soit dans son scope AVANT d'allouer — d'où ce déplacement
 # au SessionStart, Claude et ses enfants déjà lancés compris, les MCP suivants
 # héritant du cgroup. Ce qui a été alloué avant ce hook (~150 Mo de base)

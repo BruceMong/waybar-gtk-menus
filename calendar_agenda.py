@@ -84,7 +84,7 @@ DEFAULTS = {
     # Agendas à ignorer, par fragment d'identifiant. Les jours fériés et les
     # anniversaires sont des agendas comme les autres pour l'API, mais un
     # « 1 h 05 » dans la barre pour la fête nationale n'apprend rien.
-    "skip_calendars": ["holiday", "#contacts", "#weather"],
+    "skip_calendars": ["holiday", "#contacts", "#weather", "#weeknum"],
     # Agendas à suivre, par identifiant exact. Vide = tous ceux que Google
     # marque comme sélectionnés, moins skip_calendars.
     "calendars": [],
@@ -251,8 +251,8 @@ def credentials():
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
 
-    if not os.path.exists(TOKEN):
-        return None
+    if not os.path.exists(TOKEN) or os.path.getsize(TOKEN) == 0:
+        return None     # jeton absent ou vidé : « no-token », qui dit de relancer --auth
     creds = Credentials.from_authorized_user_file(TOKEN, SCOPES)
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(Request())
@@ -265,9 +265,16 @@ def save_token(creds):
     # Le jeton porte de quoi lire l'agenda sans mot de passe : il ne doit être
     # lisible que par son propriétaire, y compris sur une machine à un seul
     # compte — les sauvegardes, elles, voyagent.
-    fd = os.open(TOKEN, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    # Écrit à côté puis remplacé d'un coup : l'ancienne écriture tronquait le
+    # fichier en place, et une interruption entre la troncature et l'écriture
+    # l'a laissé vide le 2026-09-21 (plus aucune synchro pendant trois jours,
+    # « Expecting value » dans le cache). L'agenda du terminal (`agenda`)
+    # rafraîchit le même jeton : deux écrivains, raison de plus.
+    tmp = TOKEN + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(creds.to_json())
+    os.replace(tmp, TOKEN)
 
 
 def auth():
@@ -281,8 +288,13 @@ def auth():
               file=sys.stderr)
         return 1
     flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET, SCOPES)
+    # Le lien s'affiche toujours : le 2026-09-24, lancée depuis un shell sans
+    # navigateur attaché, la commande attendait en silence et semblait ne
+    # rien faire. Si le retour sur localhost n'aboutit pas, coller l'URL de
+    # retour dans le même navigateur que celui qui a ouvert le lien.
     creds = flow.run_local_server(port=0, prompt="consent",
-                                  authorization_prompt_message="")
+                                  authorization_prompt_message=(
+                                      "Ouvre ce lien et accepte :\n{url}\n"))
     save_token(creds)
     print("Autorisation enregistrée dans %s" % TOKEN)
     return sync()
@@ -653,8 +665,46 @@ def tick():
     if stale:
         sync()
         refresh_bar()
+        alert_sync()
     remind(conf)
     return 0
+
+
+def alert_sync():
+    """Une panne de synchro se dit une fois par jour, pas seulement dans le tooltip.
+
+    Le jeton vidé du 2026-09-21 n'a été vu que trois jours plus tard : la barre
+    continuait d'afficher le cache, et le seul signe était une ligne en
+    italique dans une bulle qu'on n'ouvre pas. Deux cas : l'autorisation est
+    perdue (jeton absent, révoqué, ou expiré — un projet OAuth resté en mode
+    « Testing » perd son jeton au bout de 7 jours), ou la lecture échoue depuis
+    plus de 6 h (réseau, API)."""
+    cache = read_cache()
+    err = cache.get("error") or ""
+    if not err or err == "no-cache":
+        return
+    auth_lost = err == "no-token" or any(
+        s in err for s in ("invalid_grant", "expired or revoked", "RefreshError", "Expecting value"))
+    if not auth_lost:
+        try:
+            age_h = (datetime.now().astimezone() - parse(cache["fetched"])).total_seconds() / 3600
+        except (KeyError, TypeError, ValueError):
+            age_h = 99
+        if age_h < 6:
+            return
+    os.makedirs(NOTIFIED_DIR, exist_ok=True)
+    mark = os.path.join(NOTIFIED_DIR, "sync-alert-" + datetime.now().strftime("%Y-%m-%d"))
+    if os.path.exists(mark):
+        return
+    open(mark, "w").close()
+    if auth_lost:
+        title, body = ("Agenda Google : autorisation perdue",
+                       "La barre affiche un agenda figé. Relancer :\n"
+                       "~/.config/waybar/calendar_agenda.py --auth")
+    else:
+        title, body = ("Agenda Google : pas de synchro depuis plus de 6 h", err[:160])
+    subprocess.Popen(["notify-send", "-a", "Agenda", "-u", "critical", "-i", "x-office-calendar", title, body],
+                     start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 # ── Entrée ────────────────────────────────────────────────────────────────

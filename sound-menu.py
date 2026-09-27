@@ -30,6 +30,8 @@ VOL_MAX = 150  # plafond cohérent avec le scroll waybar (-l 1.5)
 # -- Enregistrement de réunion --
 RECORDER = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "voice-recorder.sh")
+SCREEN_MENU = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "screen-menu.py")
 # État de session : $XDG_RUNTIME_DIR est privé à l'utilisateur et vidé à la
 # déconnexion, là où /tmp est partagé entre comptes et survit à la session.
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
@@ -154,6 +156,7 @@ class SoundPopup(LayerPopup):
     IC_SOURCE = "\U000f036c"   # périphérique d'entrée
     IC_LEVEL = ""              # le VU-mètre porte son propre libellé
     IC_FOLDER = "\U000f024b"   # dossier
+    IC_SCREEN = "\U000f0567"   # caméra : enregistrement d'écran
     IC_FIX = "\U000f0709"      # rotation / réinitialisation
     IC_PREFS = "\U000f0493"    # engrenage
 
@@ -251,6 +254,9 @@ class SoundPopup(LayerPopup):
 
         # ── Aller plus loin ──
         more = self.add_card()
+        more.action(self.IC_SCREEN, "Enregistrer l'écran",
+                    subtitle="Région, fenêtre ou écran, avec ou sans son",
+                    chevron=True, on_click=self._open_screen_menu)
         more.action(self.IC_FOLDER, "Dossier des enregistrements",
                     on_click=self._open_rec_dir)
         if source_exists():
@@ -391,6 +397,11 @@ class SoundPopup(LayerPopup):
         # périodique d'une seconde posé au montage), donc le rendre directement
         # ici installerait un second timer permanent à chaque clic.
         GLib.timeout_add(900, self._refresh_record_once)
+
+    def _open_screen_menu(self, _btn):
+        # Un popup à la fois : celui-ci se ferme, l'autre prend sa place.
+        subprocess.Popen([SCREEN_MENU], stdout=DEVNULL, stderr=DEVNULL)
+        self.close()
 
     def _open_rec_dir(self, _btn):
         subprocess.Popen([RECORDER, "dir"], stdout=DEVNULL, stderr=DEVNULL)

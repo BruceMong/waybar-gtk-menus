@@ -407,7 +407,8 @@
         "return-type": "json",
         "exec": "$HOME/.config/waybar/recorder-status.sh",
         "restart-interval": 5,
-        "on-click": "pkill wf-recorder"
+        "on-click": "~/.config/waybar/screen-recorder.sh stop",
+        "on-click-right": "~/.config/waybar/screen-menu.py"
     },
     "custom/voice-rec": {
         "format": "{}",

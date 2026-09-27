@@ -11,7 +11,7 @@ payload="$(cat)"
 cs_resolve
 cs_write running "$payload" "Traitement en cours"
 # Les MCP nés après le SessionStart rejoignent le scope de la session, sans
-# quoi le gel (ALT+F) ne rend pas leur mémoire — cf. cs_scope.
+# quoi le gel (ALT+G) ne rend pas leur mémoire — cf. cs_scope.
 cs_scope
 
 exit 0

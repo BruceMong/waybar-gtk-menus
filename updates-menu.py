@@ -66,6 +66,14 @@ HERDR_KITTY_CONF = os.path.expanduser("~/.config/kitty/herdr.conf")
 # l'onglet, herdr les pose dans l'environnement du pane, et la commande tapée
 # tient sur une ligne.
 PROMPT_ENV = "WAYBAR_UPDATES_PROMPT"
+# Depuis le 2026-09-26, la session vit dans l'onglet « Maj » du workspace
+# « Perso », à côté du panneau des mises à jour (herdr-perso --maj), et y est
+# RÉUTILISÉE : un second clic ne rouvre pas d'onglet, il vide la session
+# (/clear) et lui redonne la consigne. Sans ce workspace, on retombe sur un
+# onglet du workspace du dépôt de config, comme avant.
+MAJ_WORKSPACE = "Perso"
+MAJ_TAB = "Maj"
+MAJ_PANEL = os.path.expanduser("~/.local/bin/herdr-perso")
 
 CLAUDE_PROMPT = """%s
 
@@ -325,6 +333,73 @@ def herdr_run(command, cwd, env):
     return True
 
 
+def maj_session(command, cwd, env, prompt):
+    """Mène la session de mise à jour dans l'onglet Maj du workspace Perso.
+
+    Onglet absent : créé, avec le panneau des mises à jour. Session Claude
+    déjà présente dans l'onglet : si elle est au repos, /clear puis la
+    consigne ; si elle travaille, on la montre sans rien lui envoyer (une
+    consigne prise en file au milieu d'un `yay -Syu` n'aurait pas de sens).
+    Pas de session : un pane s'ouvre à droite du panneau et la lance.
+
+    Renvoie un message, ou None si le workspace n'existe pas ou que herdr ne
+    répond pas — l'appelant retombe alors sur herdr_run.
+    """
+    listing = herdr("workspace", "list")
+    ws = next((w["workspace_id"] for w in (listing or {}).get("workspaces", [])
+               if w.get("label") == MAJ_WORKSPACE), None)
+    if not ws:
+        return None
+    tabs = (herdr("tab", "list", "--workspace", ws) or {}).get("tabs", [])
+    tab = next((t["tab_id"] for t in tabs
+                if t.get("label", "").strip().endswith(MAJ_TAB)), None)
+    if not tab:
+        made = herdr("tab", "create", "--workspace", ws, "--cwd",
+                     os.path.expanduser("~"), "--label", MAJ_TAB, "--focus")
+        tab = ((made or {}).get("tab") or {}).get("tab_id")
+        panel = ((made or {}).get("root_pane") or {}).get("pane_id")
+        if not tab or not panel:
+            return None
+        if os.access(MAJ_PANEL, os.X_OK):
+            herdr("pane", "run", panel, "%s --maj" % shlex.quote(MAJ_PANEL))
+    herdr("workspace", "focus", ws)
+    herdr("tab", "focus", tab)
+    panes = [p for p in (herdr("pane", "list", "--workspace", ws) or {}).get("panes", [])
+             if p.get("tab_id") == tab]
+    agent = next((p for p in panes if p.get("agent") == "claude"), None)
+
+    if agent:
+        pane = agent["pane_id"]
+        freeze = os.path.expanduser("~/.local/bin/herdr-freeze")
+        if os.access(freeze, os.X_OK):
+            try:   # une session gelée (ALT+G) ne lirait pas le /clear
+                subprocess.run([freeze, "--pane", pane, "--degeler"],
+                               stdout=DEVNULL, stderr=DEVNULL, timeout=30)
+            except (OSError, subprocess.SubprocessError):
+                pass
+        herdr("agent", "focus", pane)
+        show_herdr()
+        status = ((herdr("agent", "get", pane) or {}).get("agent") or {}).get("agent_status")
+        if status not in ("idle", "done"):
+            return "session de mise à jour déjà en cours (%s) : rien envoyé" % status
+        herdr("agent", "prompt", pane, "/clear")
+        herdr("agent", "wait", pane, "--until", "idle", "--until", "done",
+              "--timeout", "8000")
+        if herdr("agent", "prompt", pane, prompt) is None:
+            return "consigne refusée par la session"
+        return "session de mise à jour relancée (/clear)"
+
+    anchor = panes[-1]["pane_id"] if panes else None
+    env_args = [a for k, v in env.items() for a in ("--env", "%s=%s" % (k, v))]
+    split = herdr("pane", "split", *([anchor] if anchor else []), "--direction",
+                  "right", "--ratio", "0.4", "--cwd", cwd, "--focus", *env_args)
+    pane = ((split or {}).get("pane") or {}).get("pane_id")
+    if not pane or herdr("pane", "run", pane, command) is None:
+        return None
+    show_herdr()
+    return "session de mise à jour ouverte dans %s › %s" % (MAJ_WORKSPACE, MAJ_TAB)
+
+
 class UpdatesPopup(LayerPopup):
     """Un état, une répartition, deux actions.
 
@@ -512,16 +587,18 @@ class UpdatesPopup(LayerPopup):
         Le terminal reste nécessaire pour la conversation — c'est là que la
         session demande un arbitrage et qu'on valide ses commandes.
 
-        Ce terminal est un onglet herdr dans le workspace du dépôt de config,
-        pour que la session vive avec les autres Claude ; sans herdr, un Kitty
-        à part sur le bureau 5, comme avant.
+        Ce terminal est l'onglet Maj du workspace Perso (maj_session), réutilisé
+        d'un clic à l'autre ; sans ce workspace, un onglet dans celui du dépôt
+        de config ; sans herdr, un Kitty à part sur le bureau 5, comme avant.
         """
         intro = PROMPT_WITH_UPDATES if upgrade else PROMPT_NOTHING_TODO
         cwd = CONFIG_REPO if os.path.isdir(CONFIG_REPO) else os.path.expanduser("~")
         prompt = CLAUDE_PROMPT % intro
         command = '%s "$%s"; %s --refresh' % (
             shlex.quote(CLAUDE_BIN), PROMPT_ENV, shlex.quote(UPDATES_SH))
-        if not herdr_run(command, cwd, {PROMPT_ENV: prompt}):
+        env = {PROMPT_ENV: prompt}
+        if (maj_session(command, cwd, env, prompt) is None
+                and not herdr_run(command, cwd, env)):
             script = "%s %s; %s --refresh" % (
                 shlex.quote(CLAUDE_BIN), shlex.quote(prompt),
                 shlex.quote(UPDATES_SH))

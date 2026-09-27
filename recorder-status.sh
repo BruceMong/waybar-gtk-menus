@@ -13,12 +13,9 @@
 # jour — et un `ps` forké à chaque tour — uniquement pour constater qu'il n'y
 # a rien à afficher.
 #
-# Pourquoi 3 s et non la sieste longue de voice-status.sh : l'enregistrement
-# d'écran démarre depuis un bind Hyprland qui lance wf-recorder directement,
-# sans passer par un script qui pourrait nous réveiller. La sieste doit donc
-# rester assez courte pour que l'indicateur apparaisse aussitôt la sélection
-# slurp validée. SIGRTMIN+13 est malgré tout accepté, pour le jour où le
-# lancement passera par un wrapper.
+# Pourquoi 3 s et non la sieste longue de voice-status.sh : screen-recorder.sh
+# nous réveille (SIGRTMIN+13), mais un wf-recorder lancé à la main, lui, ne
+# préviendra personne. La sieste reste donc assez courte pour qu'il se voie.
 PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/waybar-recorder-watch.pid"
 IDLE_NAP=3
 
@@ -51,14 +48,17 @@ json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 while true; do
     read -r pid secs <<< "$(ps -C wf-recorder -o pid=,etimes= --no-headers 2>/dev/null | head -1)"
     if [ -n "$pid" ]; then
-        # Le chemin de sortie est le dernier argument (`-f <fichier>`).
-        file=$(tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | tail -1)
+        # Le fichier final, tel que l'annonce screen-recorder.sh (en mode GIF,
+        # wf-recorder n'écrit qu'une vidéo intermédiaire) ; à défaut, le
+        # dernier argument de wf-recorder (`-f <fichier>`).
+        file=$(cat "${XDG_RUNTIME_DIR:-/tmp}/screen-recorder/path" 2>/dev/null) \
+            || file=$(tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | tail -1)
         if [ "$secs" -ge 3600 ]; then
             dur=$(printf '%d:%02d:%02d' $((secs / 3600)) $((secs % 3600 / 60)) $((secs % 60)))
         else
             dur=$(printf '%02d:%02d' $((secs / 60)) $((secs % 60)))
         fi
-        printf '{"text":" %s","class":"recording","tooltip":"Enregistrement en cours → %s\\nclic : arrêter (ou SUPER+SHIFT+R)"}\n' \
+        printf '{"text":" %s","class":"recording","tooltip":"Enregistrement en cours → %s\\nclic : arrêter (ou SUPER+SHIFT+R) · clic droit : menu"}\n' \
             "$dur" "$(json_escape "${file##*/}")"
         nap 1
     else
