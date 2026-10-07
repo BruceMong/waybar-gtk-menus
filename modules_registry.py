@@ -88,6 +88,8 @@ MODULES = [
     Module(["tray"], "\U000f02e3", "Tray"),
     Module(["custom/calendar"], "\U000f00f0", "Agenda",
            _script("calendar-menu.py"), transient=True),
+    Module(["custom/todo"], "\U000f0c52", "To-do",
+           "~/.local/bin/todo --ouvrir", transient=True),
     Module(["custom/claude"], "\U000f09d1", "Sessions Claude",
            _script("claude-menu.py"), transient=True),
     Module(["custom/mcp"], "\U000f048d", "Serveurs MCP",

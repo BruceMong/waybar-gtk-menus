@@ -7,6 +7,7 @@ Fenêtre overlay ancrée en haut à droite avec :
   - liste des réseaux scannés, cliquables :
       * réseau connu / ouvert  -> connexion directe
       * réseau sécurisé inconnu -> champ mot de passe en ligne
+      * réseau connecté -> mot de passe affichable et copiable (à partager)
       * clic droit -> se déconnecter / oublier le réseau
   - liens filaires (état du câble, connexion / déconnexion)
   - profils VPN et WireGuard, activables d'un clic
@@ -244,6 +245,55 @@ def notify(icon, title, body):
                      stdout=DEVNULL, stderr=DEVNULL)
 
 
+def add_eye(entry):
+    """Œil dans le champ : affiche / masque le secret qu'il contient.
+
+    Une icône secondaire de Gtk.Entry plutôt qu'un bouton à côté : elle reste
+    dans le champ, là où l'on regarde quand on tape.
+    """
+    def sync():
+        shown = entry.get_visibility()
+        entry.set_icon_from_icon_name(
+            Gtk.EntryIconPosition.SECONDARY,
+            "view-conceal-symbolic" if shown else "view-reveal-symbolic")
+        entry.set_icon_tooltip_text(
+            Gtk.EntryIconPosition.SECONDARY,
+            "Masquer le mot de passe" if shown else "Afficher le mot de passe")
+
+    def on_press(*_):
+        entry.set_visibility(not entry.get_visibility())
+        sync()
+
+    entry.connect("icon-press", on_press)
+    entry._sync_eye = sync
+    sync()
+
+
+def wifi_secret(uuid):
+    """Mot de passe d'un profil enregistré, '' s'il n'en a pas.
+
+    `nmcli -s` le rend sans root à l'utilisateur de la session locale active.
+    WPA-PSK d'abord, clé WEP en repli.
+    """
+    for key in ("802-11-wireless-security.psk",
+                "802-11-wireless-security.wep-key0"):
+        val = run(["nmcli", "-s", "-g", key, "connection", "show",
+                   "uuid", uuid], timeout=5).strip()
+        if val:
+            return val
+    return ""
+
+
+def copy_secret(text):
+    """Presse-papiers par stdin : un argument serait lisible dans /proc."""
+    try:
+        subprocess.run(["wl-copy", "--sensitive"], input=text, text=True,
+                       stdout=DEVNULL, stderr=DEVNULL, timeout=3)
+        return True
+    except Exception:
+        return False
+
+
 class NetworkPopup(LayerPopup):
     """Une carte par question : l'antenne, les réseaux, les outils.
 
@@ -347,6 +397,7 @@ class NetworkPopup(LayerPopup):
         self.pw_entry = Gtk.Entry()
         self.pw_entry.set_visibility(False)
         self.pw_entry.set_placeholder_text("Mot de passe")
+        add_eye(self.pw_entry)
         self.pw_entry.connect("activate", lambda *_: self._pw_connect())
         self.pw_box.pack_start(self.pw_entry, False, False, 0)
         pw_btns = Gtk.Box(spacing=8, homogeneous=True)
@@ -359,6 +410,30 @@ class NetworkPopup(LayerPopup):
         pw_btns.pack_start(self.pw_ok, True, True, 0)
         self.pw_box.pack_start(pw_btns, False, False, 0)
         self.box.pack_start(self.pw_box, False, False, 0)
+
+        # -- Mot de passe du réseau connecté (clic sur ce réseau) --
+        # Pour le donner à quelqu'un : masqué par défaut (l'écran peut être
+        # vu), l'œil le révèle, « Copier » le met dans le presse-papiers.
+        self.share_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,
+                                 spacing=8)
+        self.share_box.set_no_show_all(True)
+        self.share_label = caption_label("")
+        self.share_box.pack_start(self.share_label, False, False, 0)
+        self.share_entry = Gtk.Entry()
+        self.share_entry.set_editable(False)
+        self.share_entry.set_visibility(False)
+        add_eye(self.share_entry)
+        self.share_box.pack_start(self.share_entry, False, False, 0)
+        share_btns = Gtk.Box(spacing=8, homogeneous=True)
+        close = Gtk.Button(label="Fermer")
+        close.connect("clicked", lambda *_: self._hide_share())
+        self.share_copy = Gtk.Button(label="Copier")
+        self.share_copy.get_style_context().add_class("accent")
+        self.share_copy.connect("clicked", lambda *_: self._share_copy())
+        share_btns.pack_start(close, True, True, 0)
+        share_btns.pack_start(self.share_copy, True, True, 0)
+        self.share_box.pack_start(share_btns, False, False, 0)
+        self.box.pack_start(self.share_box, False, False, 0)
 
         # -- Mesures --
         # Ce que le menu ne disait pas : si ça passe, et à quelle vitesse. On
@@ -802,7 +877,8 @@ class NetworkPopup(LayerPopup):
             row = card.action(
                 signal_icon(level), name, markup=True, value=value,
                 selected=active,
-                tooltip=("Connecté — clic droit : se déconnecter" if active else
+                tooltip=("Connecté — clic : mot de passe, clic droit : "
+                          "se déconnecter" if active else
                          ("Réseau enregistré — clic droit : oublier le profil"
                           if ssid in known else "Cliquer pour se connecter")))
             row._ssid = ssid
@@ -873,6 +949,7 @@ class NetworkPopup(LayerPopup):
         if not active and not uuid:
             self._hide_actions()
             return
+        self._hide_share()
         self.act_label.set_markup(GLib.markup_escape_text(ssid))
         if active:
             btn = Gtk.Button(label="Se déconnecter")
@@ -896,7 +973,9 @@ class NetworkPopup(LayerPopup):
     def _on_net_clicked(self, _btn, ssid, secured):
         self._hide_actions()
         if any(n[0] == ssid and n[3] for n in self._state["nets"]):
-            return          # déjà connecté (déconnexion = clic droit)
+            self._show_share(ssid, secured)   # déconnexion = clic droit
+            return
+        self._hide_share()
         uuid = self._state["known"].get(ssid)
         if uuid:
             self._connect(ssid, cmd=["nmcli", "-w", CONNECT_WAIT,
@@ -1027,6 +1106,7 @@ class NetworkPopup(LayerPopup):
 
     def _prompt_password(self, ssid, retry=False):
         self._hide_actions()
+        self._hide_share()
         self._pending = ssid
         label = ("Mot de passe incorrect ? Ressaisir pour <b>%s</b>" if retry
                  else "Mot de passe pour <b>%s</b>")
@@ -1060,6 +1140,54 @@ class NetworkPopup(LayerPopup):
         uuid = self._state["known"].get(ssid) if self._auth_failed else None
         self._connect(ssid, cmd=self._connect_cmd(ssid, ask=True), password=pw,
                       delete_uuid=uuid)
+
+    # ---- Partage du mot de passe ----
+
+    def _show_share(self, ssid, secured):
+        self.pw_box.hide()
+        self._pending = None
+        self.share_label.set_markup(
+            "Mot de passe de <b>%s</b>" % GLib.markup_escape_text(ssid))
+        self.share_entry.set_text("")
+        self.share_entry.set_visibility(False)
+        self.share_entry._sync_eye()
+        self.share_copy.set_label("Copier")
+        self.share_copy.set_sensitive(False)
+        reveal(self.share_box)
+        if not secured:
+            self.share_entry.set_placeholder_text("Réseau ouvert, sans mot de passe")
+            return
+        uuid = self._state["known"].get(ssid)
+        if not uuid:
+            self.share_entry.set_placeholder_text("Profil introuvable")
+            return
+        self.share_entry.set_placeholder_text("Lecture…")
+
+        def done(res):
+            if not self.share_box.get_visible():
+                return
+            if isinstance(res, str) and res:
+                self.share_entry.set_text(res)
+                self.share_copy.set_sensitive(True)
+                self.share_copy.grab_focus()
+            else:
+                self.share_entry.set_placeholder_text(
+                    "Mot de passe non enregistré (trousseau ?)")
+
+        self._in_thread(lambda: wifi_secret(uuid), done)
+
+    def _hide_share(self):
+        self.share_entry.set_text("")
+        self.share_box.hide()
+
+    def _share_copy(self):
+        pw = self.share_entry.get_text()
+        if not pw:
+            return
+        ok = copy_secret(pw)
+        self.share_copy.set_label("Copié" if ok else "Échec de la copie")
+        GLib.timeout_add(1500, lambda: (self.share_copy.set_label("Copier"),
+                                        False)[1])
 
     # ---- Actions ----
 

@@ -52,7 +52,7 @@
     },
     "group/status": {
         "orientation": "inherit",
-        "modules": ["custom/calendar", "custom/claude", "custom/mcp", "custom/dnd", "custom/updates", "systemd-failed-units"]
+        "modules": ["custom/calendar", "custom/todo", "custom/claude", "custom/mcp", "custom/dnd", "custom/updates", "systemd-failed-units"]
     },
     "group/system": {
         "orientation": "inherit",
@@ -326,6 +326,15 @@
         "max-length": 30,
         "on-click": "~/.config/waybar/calendar_agenda.py --menu",
         "on-click-right": "uwsm app -t service -S both -- xdg-open https://calendar.google.com"
+    },
+
+    "custom/todo": {
+        "format": "{}",
+        "return-type": "json",
+        "exec": "~/.local/bin/todo --waybar",
+        "interval": 300,
+        "signal": 17,
+        "on-click": "~/.local/bin/todo --ouvrir"
     },
 
     "custom/updates": {

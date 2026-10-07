@@ -3,7 +3,7 @@
 
 Réglages de notification : Ne pas déranger (switch + minuteries 30 min / 1 h),
 son des notifications, notifications discrètes (moins larges), notifications
-de Claude Code.
+de Claude Code, notifications et son de Slack.
 
 La pile elle-même vit dans le centre swaync : ce popup ne fait que les
 réglages, et se contente d'y mener par sa dernière carte.
@@ -25,6 +25,12 @@ CLAUDE_FLAG = os.path.join(CONFIG_DIR, "claude-notify-focus.disabled")
 # Mascotte posée à côté des hooks — la même que sur leurs notifications.
 CLAUDE_ICON = os.path.expanduser("~/.claude/hooks/clawd.png")
 SOUND_FLAG = os.path.join(CONFIG_DIR, "notif-sound.enabled")
+# Slack : deux drapeaux, deux mécanismes. Les notifications sont une règle de
+# visibilité swaync (notif-compact.sh slack on|off) ; le son, Slack le joue
+# lui-même, et c'est son flux audio que coupe ~/.local/bin/slack-sound.
+SLACK_NOTIF_FLAG = os.path.join(CONFIG_DIR, "slack-notif.disabled")
+SLACK_SOUND_FLAG = os.path.join(CONFIG_DIR, "slack-sound.disabled")
+SLACK_SOUND = os.path.expanduser("~/.local/bin/slack-sound")
 # Largeur des notifications flottantes : le drapeau est lu par notif-compact.sh,
 # qui régénère la config swaync et la fait recharger.
 COMPACT_FLAG = os.path.join(CONFIG_DIR, "notif-compact.enabled")
@@ -56,6 +62,7 @@ class NotificationPopup(LayerPopup):
     IC_COMPACT = "\U000f084c"  # flèches qui se resserrent
     IC_OPACITY = "\U000f05cc"  # gouttes superposées (opacité)
     IC_CLAUDE = "\U000f09d1"   # cerveau
+    IC_SLACK = "\U000f04b1"    # logo Slack
     IC_CENTER = "\U000f009a"   # cloche
     IC_CLEAR = "\U000f01b4"    # balai
 
@@ -101,6 +108,18 @@ class NotificationPopup(LayerPopup):
         prefs.toggle(self.IC_CLAUDE, "Notifications Claude Code",
                      not os.path.exists(CLAUDE_FLAG), self._on_claude_toggled,
                      subtitle="en attente, tâche terminée")
+
+        slack = self.add_card("Slack")
+        slack.toggle(self.IC_SLACK, "Notifications Slack",
+                     not os.path.exists(SLACK_NOTIF_FLAG),
+                     self._on_slack_notif_toggled)
+        # Le démon qui coupe le son vit hors de waybar/ (package local du
+        # dépôt arch-config) : sans lui, l'interrupteur ne ferait rien.
+        if os.path.exists(SLACK_SOUND):
+            slack.toggle(self.IC_SOUND, "Son de Slack",
+                         not os.path.exists(SLACK_SOUND_FLAG),
+                         self._on_slack_sound_toggled,
+                         subtitle="coupé, il l'est aussi en huddle")
 
         # La pile elle-même vit dans swaync. Le clic gauche sur la cloche y
         # mène déjà, mais ce popup s'ouvre au clic DROIT : sans ces deux
@@ -232,6 +251,28 @@ class NotificationPopup(LayerPopup):
                           "Notifications Claude Code", msg])
         subprocess.Popen([os.path.join(CONFIG_DIR, "notification-refresh.sh")],
                          stdout=DEVNULL, stderr=DEVNULL)
+
+    def _on_slack_notif_toggled(self, switch, _param):
+        on = switch.get_active()
+        subprocess.run([COMPACT_TOGGLE, "slack", "on" if on else "off"],
+                       stdout=DEVNULL, stderr=DEVNULL)
+        subprocess.Popen(["notify-send", "-a", "swaync", "-i", "slack",
+                          "Notifications Slack", "Activées" if on else "Coupées"])
+
+    def _on_slack_sound_toggled(self, switch, _param):
+        if switch.get_active():
+            try:
+                os.remove(SLACK_SOUND_FLAG)
+            except OSError:
+                pass
+        else:
+            open(SLACK_SOUND_FLAG, "a").close()
+        # Le démon (slack-sound.service) coupe les flux à venir ; apply traite
+        # ceux qui jouent déjà et pose le témoin de démute au retour du son.
+        subprocess.Popen([SLACK_SOUND, "apply"], stdout=DEVNULL, stderr=DEVNULL)
+        subprocess.Popen(["notify-send", "-a", "swaync", "-i", "slack",
+                          "Son de Slack",
+                          "Activé" if switch.get_active() else "Coupé"])
 
 
 def main():

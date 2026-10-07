@@ -12,6 +12,7 @@ haut à droite, avec :
 
 import atexit
 import fcntl
+import json
 import os
 import re
 import signal
@@ -479,6 +480,31 @@ def _write_lock(entries):
 
 
 _focus_detached = False
+
+
+def screen_room_below(margin_top, bottom_gap=16):
+    """Hauteur disponible pour un popup ancré en haut, en px logiques.
+
+    La marge haute d'une surface layer-shell se compte depuis le bord de la
+    zone réservée par la barre, pas depuis le haut de l'écran : il faut donc
+    retrancher les deux. Renvoie None si l'écran est introuvable.
+    """
+    reserved = 34
+    try:
+        out = subprocess.check_output(["hyprctl", "monitors", "-j"], text=True,
+                                      stderr=subprocess.DEVNULL, timeout=1)
+        for mon in json.loads(out):
+            if mon.get("focused"):
+                reserved = int(mon.get("reserved", [0, reserved])[1])
+                break
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError,
+            IndexError):
+        pass
+    display = Gdk.Display.get_default()
+    monitor = display.get_primary_monitor() or display.get_monitor(0)
+    if monitor is None:
+        return None
+    return monitor.get_geometry().height - reserved - margin_top - bottom_gap
 
 
 def detach_pointer_focus():
@@ -1001,7 +1027,29 @@ class LayerPopup(Gtk.Window):
         self.box.set_margin_start(14)
         self.box.set_margin_end(14)
         self._build_header(title)
-        self.add(self.box)
+
+        # Une surface layer-shell n'est jamais raccourcie par le compositeur :
+        # un popup plus haut que l'écran (Wi-Fi avec beaucoup de réseaux, Son
+        # avec plusieurs sorties et micros) perdait son bas, hors d'atteinte.
+        # Le contenu défile donc au-delà de la hauteur disponible, et garde sa
+        # hauteur naturelle tant qu'il tient.
+        self._page_scroller = Gtk.ScrolledWindow()
+        self._page_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self._page_scroller.set_propagate_natural_height(True)
+        room = screen_room_below(margin_top)
+        if room is not None:
+            self._page_scroller.set_max_content_height(room)
+        # Viewport explicite : celui qu'ajoute add() donne au contenu sa
+        # hauteur MINIMALE dès qu'il défile, ce qui écrasait les listes
+        # défilantes imbriquées (réseaux Wi-Fi) à leur plancher.
+        viewport = Gtk.Viewport()
+        viewport.set_shadow_type(Gtk.ShadowType.NONE)
+        viewport.set_vscroll_policy(Gtk.ScrollablePolicy.NATURAL)
+        viewport.add(self.box)
+        self._page_scroller.add(viewport)
+        # Tab et flèches : le défilement suit l'élément focalisé.
+        self.box.set_focus_vadjustment(self._page_scroller.get_vadjustment())
+        self.add(self._page_scroller)
 
     def _build_header(self, title):
         header = Gtk.Box(spacing=8)

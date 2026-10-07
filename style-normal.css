@@ -97,6 +97,7 @@ window#waybar {
 #custom-chrome,
 #custom-zen,
 #custom-calendar,
+#custom-todo,
 #custom-claude,
 #custom-mcp,
 #custom-dnd,
@@ -190,6 +191,7 @@ window#waybar {
 #custom-zen:hover,
 #custom-claude:hover,
 #custom-mcp:hover,
+#custom-todo:hover,
 #custom-dnd:hover,
 #custom-power:hover,
 #custom-recorder:hover,
@@ -220,6 +222,7 @@ window#waybar {
 #custom-zen:active,
 #custom-claude:active,
 #custom-mcp:active,
+#custom-todo:active,
 #custom-dnd:active,
 #custom-recorder:active,
 #custom-voice-rec:active,
@@ -397,6 +400,7 @@ window#waybar {
    modules sans toucher à celui qui tient chaque paire ensemble, et la zone
    reste malgré tout plus dense que la rangée d'icônes — c'est un paquet. */
 #custom-calendar,
+#custom-todo,
 #custom-claude,
 #custom-mcp,
 #custom-dnd,
@@ -535,6 +539,17 @@ window#waybar {
    s'agiterait pendant toute la réunion. */
 #custom-calendar.now {
     color: @sysBlue;
+}
+
+/* ── To-do : le nombre de tâches du jour ──
+      Absent quand il n'y a rien pour aujourd'hui. Une tâche en retard n'est
+      pas une panne : l'orange, pas le rouge, et pas de clignotement. ── */
+#custom-todo {
+    color: @ink2;
+}
+
+#custom-todo.retard {
+    color: @sysOrange;
 }
 
 /* ── Réseau / Bluetooth : déconnecté = éteint, pas rouge ── */

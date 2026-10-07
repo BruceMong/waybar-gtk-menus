@@ -301,7 +301,7 @@ VARS_HYPRLOCK = [
     ("inkTitle", T.INK, "0.92", "le nom du compte"),
     ("inkDate", T.INK, "0.72", "la date, au-dessus de l'heure"),
     ("inkContact", T.INK, "0.58", "les coordonnées en cas de perte"),
-    ("inkStatus", T.INK, "0.55", "batterie, empreinte, musique, alimentation"),
+    ("inkStatus", T.INK, "0.55", "batterie, empreinte, alimentation"),
     ("inkHint", T.INK, "0.45", "état du lecteur d'empreinte"),
     ("inkWhisper", T.INK, "0.34", "l'invitation à rendre la machine"),
     ("fieldOuter", T.ON_ACCENT, "0.16", "hairline du champ de saisie"),

@@ -2,7 +2,7 @@
 # Apparence des notifications (swaync) — piloté par le menu notifications de
 # Waybar : interrupteur « Notifications discrètes » et curseur « Opacité ».
 #
-# Usage : notif-compact.sh on|off|toggle|opacity <0-100>|apply|start
+# Usage : notif-compact.sh on|off|toggle|opacity <0-100>|slack on|off|apply|start
 #
 # Deux réglages, deux supports :
 #
@@ -16,14 +16,20 @@
 # des fichiers GÉNÉRÉS, config-active.json et style-active.css (ignorés par
 # git, comme le config-active de waybar), produits à partir des sources avec
 # les valeurs qui correspondent à l'état du drapeau et du curseur.
-# `hyprland.lua` lance swaync par `notif-compact.sh start`, qui génère puis
-# exécute `swaync -c … -s …`.
+# swaync-notif.service (systemd --user) lance swaync par `notif-compact.sh
+# start`, qui génère puis exécute `swaync -c … -s …`, et le relance s'il
+# plante. Sans l'unité, l'autostart du compositeur peut appeler `start`.
 #
 # Le drapeau et la valeur d'opacité vivent à côté des autres interrupteurs du
 # menu (notif-sound.enabled, claude-notify-focus.disabled) : drapeau présent =
 # compact ; fichier d'opacité absent = 72 %, la valeur d'origine de style.css.
 
 FLAG="$HOME/.config/waybar/notif-compact.enabled"
+# Interrupteur « Notifications Slack » du menu : présent = Slack ignoré. C'est
+# une règle `notification-visibility` de la config, donc elle vit ici, avec la
+# seule chose qui écrit config-active.json. Le SON de Slack est à part : Slack
+# le joue lui-même, cf. ~/.local/bin/slack-sound.
+SLACK_FLAG="$HOME/.config/waybar/slack-notif.disabled"
 OPACITY_FILE="$HOME/.config/waybar/notif-opacity"
 SRC="$HOME/.config/swaync/config.json"
 OUT="$HOME/.config/swaync/config-active.json"
@@ -50,15 +56,24 @@ read_opacity() {
 }
 
 generate_config() {
-    if [ -f "$FLAG" ]; then
-        jq --argjson w "$COMPACT_WIDTH" --argjson i "$COMPACT_IMAGE_WIDTH" \
-           --argjson h "$COMPACT_IMAGE_HEIGHT" \
-           '."notification-window-width" = $w
+    local compact=false slack=false
+    [ -f "$FLAG" ] && compact=true
+    [ -f "$SLACK_FLAG" ] && slack=true
+    # « ignored » et non « muted » : muted range la notification dans le
+    # centre et la compte dans le badge de la barre. Slack tient déjà ses
+    # propres non-lus.
+    jq --argjson compact "$compact" --argjson slack "$slack" \
+       --argjson w "$COMPACT_WIDTH" --argjson i "$COMPACT_IMAGE_WIDTH" \
+       --argjson h "$COMPACT_IMAGE_HEIGHT" \
+       'if $compact then
+            ."notification-window-width" = $w
             | ."notification-body-image-width" = $i
-            | ."notification-body-image-height" = $h' "$SRC" > "$OUT.tmp"
-    else
-        cat "$SRC" > "$OUT.tmp"
-    fi
+            | ."notification-body-image-height" = $h
+        else . end
+        | if $slack then
+            ."notification-visibility".slack =
+                { "state": "ignored", "app-name": "^[Ss]lack$" }
+          else . end' "$SRC" > "$OUT.tmp"
     mv "$OUT.tmp" "$OUT"
 }
 
@@ -180,8 +195,18 @@ apply() {
     # faut donc redémarrer swaync — c'est instantané, et les abonnés
     # (custom/dnd, bouton « Tout effacer ») se reconnectent d'eux-mêmes.
     # Ce redémarrage rattrape aussi un swaync lancé sans -c/-s.
-    pkill -x swaync
-    setsid -f "$0" start >/dev/null 2>&1 </dev/null
+    #
+    # Quand swaync tourne sous swaync-notif.service (unité qui le relance
+    # après un crash), c'est elle qui redémarre : un pkill suivi d'un
+    # lancement à la main en ferait tourner deux, celui de l'unité revenant
+    # une seconde plus tard. Sans l'unité (dépôt public, autostart nu), on
+    # garde le redémarrage à la main.
+    if systemctl --user is-active --quiet swaync-notif.service 2>/dev/null; then
+        systemctl --user restart swaync-notif.service
+    else
+        pkill -x swaync
+        setsid -f "$0" start >/dev/null 2>&1 </dev/null
+    fi
     # Attendre qu'il soit de retour sur le bus, pour que la notification de
     # confirmation envoyée juste après ne parte pas dans le vide.
     for _ in $(seq 20); do
@@ -201,7 +226,16 @@ case "${1:-toggle}" in
             printf '%s\n' "$2" > "$OPACITY_FILE"
             reload_css ;;
     get-opacity) read_opacity; echo ;;
+    slack)  case "$2" in
+                on)  rm -f "$SLACK_FLAG" ;;
+                off) touch "$SLACK_FLAG" ;;
+                *)   echo "usage: notif-compact.sh slack on|off" >&2; exit 1 ;;
+            esac
+            # Une règle de visibilité est relue par --reload-config, sans le
+            # redémarrage qu'exige la largeur.
+            generate_config
+            swaync-client --reload-config >/dev/null 2>&1 ;;
     apply)  apply ;;
     start)  generate; exec swaync -c "$OUT" -s "$STYLE_OUT" ;;
-    *)      echo "usage: notif-compact.sh on|off|toggle|opacity <10-100>|apply|start" >&2; exit 1 ;;
+    *)      echo "usage: notif-compact.sh on|off|toggle|opacity <10-100>|slack on|off|apply|start" >&2; exit 1 ;;
 esac

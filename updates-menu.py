@@ -382,9 +382,23 @@ def maj_session(command, cwd, env, prompt):
         status = ((herdr("agent", "get", pane) or {}).get("agent") or {}).get("agent_status")
         if status not in ("idle", "done"):
             return "session de mise à jour déjà en cours (%s) : rien envoyé" % status
-        herdr("agent", "prompt", pane, "/clear")
-        herdr("agent", "wait", pane, "--until", "idle", "--until", "done",
-              "--timeout", "8000")
+        # /clear ne fait pas passer la session par `working` : attendre `idle`
+        # rendait la main aussitôt, la consigne arrivait avant que le /clear
+        # soit soumis et les deux se collaient (« Unknown command: /clearMets »).
+        # Le signe sûr est la nouvelle conversation : le hook SessionStart
+        # déclare à herdr un autre identifiant de session.
+        def session_id():
+            a = (herdr("agent", "get", pane) or {}).get("agent") or {}
+            return (a.get("agent_session") or {}).get("value")
+        before = session_id()
+        if herdr("agent", "prompt", pane, "/clear") is None:
+            return "/clear refusé par la session"
+        deadline = time.monotonic() + 15
+        while session_id() == before:
+            if time.monotonic() > deadline:
+                return "/clear sans effet visible : consigne non envoyée"
+            time.sleep(0.3)
+        time.sleep(1)   # laisser l'invite se redessiner avant de taper
         if herdr("agent", "prompt", pane, prompt) is None:
             return "consigne refusée par la session"
         return "session de mise à jour relancée (/clear)"
