@@ -932,8 +932,14 @@ class ClaudeMenu(LayerPopup):
         if res is None:
             return False
         label = session.get("dir") or os.path.basename(cwd)
-        ws = next((w["workspace_id"] for w in res.get("workspaces") or []
-                   if w.get("label") == label), None)
+        wss = res.get("workspaces") or []
+        # À défaut du nom exact, « <dossier>-tickets » puis le premier « <dossier>-… » :
+        # ecomflows est réparti en ecomflows-tickets et ecomflows-manage depuis le 2026-10-07.
+        ws = next((w["workspace_id"] for cible in (
+                       lambda l: l == label,
+                       lambda l: l == label + "-tickets",
+                       lambda l: l.startswith(label + "-"))
+                   for w in wss if cible(w.get("label") or "")), None)
         if ws:
             tab = herdr("tab", "create", "--workspace", ws, "--cwd", cwd, "--focus")
             pane = ((tab or {}).get("root_pane") or {}).get("pane_id")

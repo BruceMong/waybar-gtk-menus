@@ -67,11 +67,11 @@ HERDR_KITTY_CONF = os.path.expanduser("~/.config/kitty/herdr.conf")
 # tient sur une ligne.
 PROMPT_ENV = "WAYBAR_UPDATES_PROMPT"
 # Depuis le 2026-09-26, la session vit dans l'onglet « Maj » du workspace
-# « Perso », à côté du panneau des mises à jour (herdr-perso --maj), et y est
+# « arch-config » (« Perso » jusqu'au 2026-10-08, rapproché de l'onglet Veille), à côté du panneau des mises à jour (herdr-perso --maj), et y est
 # RÉUTILISÉE : un second clic ne rouvre pas d'onglet, il vide la session
 # (/clear) et lui redonne la consigne. Sans ce workspace, on retombe sur un
 # onglet du workspace du dépôt de config, comme avant.
-MAJ_WORKSPACE = "Perso"
+MAJ_WORKSPACE = "arch-config"
 MAJ_TAB = "Maj"
 MAJ_PANEL = os.path.expanduser("~/.local/bin/herdr-perso")
 
@@ -334,7 +334,7 @@ def herdr_run(command, cwd, env):
 
 
 def maj_session(command, cwd, env, prompt):
-    """Mène la session de mise à jour dans l'onglet Maj du workspace Perso.
+    """Mène la session de mise à jour dans l'onglet Maj du workspace arch-config.
 
     Onglet absent : créé, avec le panneau des mises à jour. Session Claude
     déjà présente dans l'onglet : si elle est au repos, /clear puis la
@@ -601,9 +601,9 @@ class UpdatesPopup(LayerPopup):
         Le terminal reste nécessaire pour la conversation — c'est là que la
         session demande un arbitrage et qu'on valide ses commandes.
 
-        Ce terminal est l'onglet Maj du workspace Perso (maj_session), réutilisé
-        d'un clic à l'autre ; sans ce workspace, un onglet dans celui du dépôt
-        de config ; sans herdr, un Kitty à part sur le bureau 5, comme avant.
+        Ce terminal est l'onglet Maj du workspace arch-config (maj_session),
+        réutilisé d'un clic à l'autre ; sans ce workspace, un onglet neuf dans
+        celui du dépôt de config ; sans herdr, un Kitty à part sur le bureau 5, comme avant.
         """
         intro = PROMPT_WITH_UPDATES if upgrade else PROMPT_NOTHING_TODO
         cwd = CONFIG_REPO if os.path.isdir(CONFIG_REPO) else os.path.expanduser("~")

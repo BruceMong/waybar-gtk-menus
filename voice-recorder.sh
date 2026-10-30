@@ -1,5 +1,5 @@
 #!/bin/bash
-# Enregistreur vocal de réunion (module waybar custom/voice-rec + menu Son).
+# Enregistreur vocal de réunion (module waybar custom/voice-rec + popup Enregistrer record-menu.py).
 #
 # Capture simultanément le micro et la sortie audio dans UN fichier stéréo :
 #   canal gauche = micro (moi)   |   canal droit = sortie (les autres)
@@ -116,7 +116,7 @@ start() {
 
     mkdir -p "$DIR" || return 1
     stamp=$(date +%Y-%m-%d_%H-%M)
-    # Libellé libre saisi dans le menu Son, normalisé en nom de fichier sain.
+    # Libellé libre saisi dans le popup Enregistrer, normalisé en nom de fichier sain.
     label=$(printf '%s' "${1:-}" | iconv -f utf-8 -t ascii//TRANSLIT 2>/dev/null \
             || printf '%s' "${1:-}")
     label=$(printf '%s' "$label" | tr -c 'A-Za-z0-9' '-' | tr -s '-' | sed 's/^-//; s/-$//')
@@ -127,7 +127,7 @@ start() {
     wpctl set-mute @DEFAULT_AUDIO_SOURCE@ 0 2>/dev/null
 
     # `set -m` place le job d'arrière-plan dans son propre groupe de process.
-    # Sans lui, ffmpeg hérite du groupe du menu Son qui l'a lancé — or waybar
+    # Sans lui, ffmpeg hérite du groupe du popup qui l'a lancé — or waybar
     # tue ce groupe entier quand il recharge sa barre (SIGUSR2), ce que fait
     # justement autofit dès que l'indicateur d'enregistrement apparaît. La
     # réunion s'arrêtait donc toute seule au bout de quelques secondes.

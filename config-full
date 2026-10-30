@@ -5,7 +5,7 @@
     "spacing": 2,
     "reload_style_on_change": true,
 
-    "modules-left": ["ext/workspaces", "custom/ws-tens", "hyprland/window", "custom/chrome", "custom/zen", "mpris"],
+    "modules-left": ["ext/workspaces", "custom/calques", "custom/ws-tens", "hyprland/window", "custom/chrome", "custom/zen", "mpris"],
     "modules-center": [],
     "modules-right": ["custom/voice-rec", "custom/recorder", "privacy", "group/systray", "group/tools", "group/status", "group/system", "group/connect", "pulseaudio#mic", "group/audio", "backlight", "custom/caffeine", "battery", "group/datetime", "custom/power"],
 
@@ -358,6 +358,16 @@
         "on-click": "uwsm app -t service -S both -- zen-browser"
     },
 
+    "custom/calques": {
+        "format": "{}",
+        "return-type": "json",
+        "exec": "~/.config/waybar/calques.py",
+        "escape": false,
+        "on-click": "~/.config/hypr/scripts/ws-key.sh overlay",
+        "on-scroll-up": "~/.config/hypr/scripts/ws-key.sh workspace e-1",
+        "on-scroll-down": "~/.config/hypr/scripts/ws-key.sh workspace e+1"
+    },
+
     "custom/ws-tens": {
         "format": "{}",
         "return-type": "json",
@@ -424,8 +434,8 @@
         "return-type": "json",
         "exec": "$HOME/.config/waybar/voice-status.sh",
         "restart-interval": 5,
-        "on-click": "~/.config/waybar/voice-recorder.sh stop",
-        "on-click-right": "~/.config/waybar/voice-recorder.sh dir"
+        "on-click": "~/.config/waybar/record-menu.py",
+        "on-click-right": "~/.config/waybar/voice-recorder.sh toggle"
     },
 
     "custom/dnd": {

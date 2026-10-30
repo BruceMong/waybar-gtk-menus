@@ -122,13 +122,16 @@ MODULES = [
     Module(["battery"], "\U000f0079", "Batterie", _script("battery-menu.py")),
     Module(["custom/power"], "\U000f0425", "Power", _script("power-menu.py")),
 
-    # Témoins d'enregistrement : ils n'apparaissent que pendant une capture et
-    # s'effacent seuls le reste du temps. Les masquer n'aurait pas de sens (on
+    # Enregistrer : toujours visible (● gris au repos), donc masquable comme
+    # n'importe quel module ; le ⋮ ouvre alors le même popup.
+    Module(["custom/voice-rec"], "\U000f044a", "Enregistrer",
+           _script("record-menu.py")),
+
+    # Témoin d'enregistrement d'écran : il n'apparaît que pendant une capture
+    # et s'efface seul le reste du temps. Le masquer n'aurait pas de sens (on
     # ne cache pas un voyant qui ne s'allume qu'à propos), et le ⋮ n'a rien à
-    # leur proposer — « arrêter l'enregistrement » quand aucun ne tourne. Ils
-    # figurent ici pour que l'inventaire couvre bien toute la barre.
-    Module(["custom/voice-rec"], "\U000f036c", "Enregistrement vocal",
-           hideable=False),
+    # lui proposer — « arrêter l'enregistrement » quand aucun ne tourne. Il
+    # figure ici pour que l'inventaire couvre bien toute la barre.
     Module(["custom/recorder"], "\U000f0567", "Capture d'écran",
            hideable=False),
 

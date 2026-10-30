@@ -307,20 +307,22 @@ def privacy_width():
 
 
 def voice_rec_width():
-    """Enregistrement vocal en cours : sinon voice-status.sh n'émet rien.
-
-    Le module disparaît alors de la barre, et lui compter une largeur revenait
-    à replier un module visible pour loger un module absent.
-    """
+    """Toujours visible : ● au repos, « ● 00:00 » pendant un enregistrement
+    (● seul si la durée est masquée depuis le popup Enregistrer)."""
+    dot = measure_text("\U000f044a", 13) + PAD_MODULE
     try:
         with open(os.path.join(RUNTIME_DIR, "waybar-voicerec.pid"),
                   encoding="utf-8") as fh:
             pid = fh.read().strip()
     except OSError:
-        return 0
+        return dot
     if not pid.isdigit() or not os.path.exists("/proc/" + pid):
-        return 0
-    return measure_text("\U000f036c 00:00", 13) + PAD_MODULE
+        return dot
+    state = os.environ.get("XDG_STATE_HOME",
+                           os.path.expanduser("~/.local/state"))
+    if os.path.exists(os.path.join(state, "waybar", "voicerec-hide-time")):
+        return dot
+    return measure_text("\U000f044a 00:00", 13) + PAD_MODULE
 
 
 def recorder_width():

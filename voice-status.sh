@@ -1,8 +1,11 @@
 #!/bin/bash
 # Indicateur d'enregistrement vocal (module waybar custom/voice-rec).
 #
-# Émet une ligne JSON : icône + durée tant que l'enregistrement tourne, texte
-# vide sinon — waybar masque alors le module.
+# Émet une ligne JSON. Le module est toujours visible : c'est la porte
+# d'entrée du popup Enregistrer (record-menu.py).
+#   au repos       : ● gris (classe idle)
+#   enregistrement : ● 05:12 rouge pulsé (classe recording), ou ● seul si la
+#                    durée est masquée depuis le popup
 #
 # Script continu ("exec" sans "interval") : le module ne doit donc PAS
 # déclarer de clé "signal", sinon waybar attendrait la fin du script pour
@@ -19,6 +22,9 @@ PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/waybar-voicerec.pid"
 PATHFILE="${XDG_RUNTIME_DIR:-/tmp}/waybar-voicerec.path"
 WATCHPID="${XDG_RUNTIME_DIR:-/tmp}/waybar-voicerec-watch.pid"
 IDLE_NAP=30
+# Préférence persistante (survit à la session), posée par le popup Enregistrer.
+HIDEFILE="${XDG_STATE_HOME:-$HOME/.local/state}/waybar/voicerec-hide-time"
+DOT="󰑊"   # U+F044A, mdi record
 
 # Instance unique : le reload SIGUSR2 de waybar relance ce script sans
 # toujours terminer l'ancien.
@@ -59,11 +65,15 @@ while true; do
         else
             dur=$(printf '%02d:%02d' $((secs / 60)) $((secs % 60)))
         fi
-        printf '{"text":" %s","class":"recording","tooltip":"Enregistrement vocal → %s\\nclic : arrêter | clic droit : ouvrir le dossier"}\n' \
-            "$dur" "$(json_escape "${file##*/}")"
+        # Durée masquée (popup Enregistrer) : le point seul, toujours rouge
+        # et pulsé — utile en partage d'écran. Le tooltip garde la durée.
+        text="$DOT $dur"
+        [ -e "$HIDEFILE" ] && text="$DOT"
+        printf '{"text":"%s","class":"recording","tooltip":"Enregistrement en cours (%s) → %s\\nclic : menu | clic droit : arrêter"}\n' \
+            "$text" "$dur" "$(json_escape "${file##*/}")"
         nap 1
     else
-        printf '{"text":"","class":"idle","tooltip":""}\n'
+        printf '{"text":"%s","class":"idle","tooltip":"Enregistrer une réunion\\nclic : menu | clic droit : démarrer"}\n' "$DOT"
         nap "$IDLE_NAP"
     fi
 done

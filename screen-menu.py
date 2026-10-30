@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Popup « Enregistrer l'écran » pour Waybar (vocabulaire commun : cartes + lignes).
 
-Ouvert depuis le menu Son, le clic droit sur l'indicateur d'enregistrement,
+Ouvert depuis le popup Enregistrer, le clic droit sur l'indicateur d'enregistrement,
 SUPER+CTRL+SHIFT+R ou la palette de commandes. Il ne fait que choisir :
   - la zone (région, fenêtre, écran entier),
   - le son (aucun, système, micro, les deux),
@@ -168,7 +168,7 @@ class ScreenPopup(LayerPopup):
         self._inputs += [self.sw_delay, self.sw_gif, self.sw_dnd]
 
         # ── Action ──
-        # Hors carte, comme l'enregistrement de réunion du menu Son : c'est
+        # Hors carte, comme l'enregistrement de réunion du popup Enregistrer : c'est
         # l'action franche du popup, elle a droit à un bouton plein.
         rec = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self.rec_hint = caption_label("")

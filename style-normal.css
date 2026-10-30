@@ -106,6 +106,7 @@ window#waybar {
 #custom-voice-rec,
 #custom-updates,
 #custom-ws-tens,
+#custom-calques,
 #systemd-failed-units {
     background-color: transparent;
     color: @ink;
@@ -326,6 +327,14 @@ window#waybar {
    l'opacité. */
 #workspaces {
     padding: 0 2px;
+}
+
+/* Calques de SUPER+S (calques.py) : n'apparaît que calque ouvert, sur un
+   remplissage appuyé — une seconde rangée de bureaux, posée au-dessus de la
+   première, doit se lire comme telle d'un coup d'œil. */
+#custom-calques.ouvert {
+    background-color: @fillHard;
+    padding: 0 9px;
 }
 
 #workspaces button {
@@ -735,8 +744,12 @@ window#waybar {
     background-image: linear-gradient(to top, @sysBlue 2px, transparent 2px);
 }
 
-/* ── Enregistrement vocal (masqué hors enregistrement) ── */
-#custom-voice-rec {
+/* ── Enregistrement vocal : toujours visible, porte du popup Enregistrer.
+      Neutre au repos, comme l'extinction ; rouge pulsé pendant la capture. ── */
+#custom-voice-rec.idle {
+    color: @ink2;
+}
+#custom-voice-rec.recording {
     color: @sysRed;
     font-weight: 600;
     animation: recording-pulse 2s ease-in-out infinite;
