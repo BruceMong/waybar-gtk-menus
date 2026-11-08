@@ -145,6 +145,15 @@ activate() {
             ;;
     esac
 
+    # Sessions Claude gelées (herdr-freeze, s'il est installé) : toutes réveillées, en arrière-plan
+    # — on y accède depuis un autre poste. Le gel est refusé tant que l'unité ci-dessus est
+    # active (herdr-freeze la consulte), donc plus rien ne se regèle avant la sortie du mode ;
+    # à la sortie, le gel automatique reprend tout seul les sessions restées au repos.
+    FREEZE="$(command -v herdr-freeze || echo "$HOME/.local/bin/herdr-freeze")"
+    if [ -x "$FREEZE" ]; then
+        setsid -f "$FREEZE" --tout-degeler >/dev/null 2>&1 < /dev/null
+    fi
+
     # Activer Ne pas déranger (en mémorisant l'état précédent pour le restaurer)
     swaync-client --get-dnd > "$DND_SAVE" 2>/dev/null
     "$STYLE_DIR/dnd-toggle.sh" on
