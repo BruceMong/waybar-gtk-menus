@@ -5,7 +5,7 @@
     "spacing": 2,
     "reload_style_on_change": true,
 
-    "modules-left": ["ext/workspaces", "custom/calques", "custom/ws-tens", "hyprland/window", "custom/chrome", "custom/zen", "mpris"],
+    "modules-left": ["ext/workspaces", "custom/calques", "hyprland/window", "custom/chrome", "custom/zen", "mpris"],
     "modules-center": [],
     "modules-right": ["custom/voice-rec", "custom/recorder", "privacy", "group/systray", "group/tools", "group/status", "group/system", "group/connect", "pulseaudio#mic", "group/audio", "backlight", "custom/caffeine", "battery", "group/datetime", "custom/power"],
 
@@ -109,7 +109,7 @@
             "org\\.mozilla\\.Thunderbird": "Thunderbird",
             "org\\.mozilla\\.firefox": "Firefox",
             "com\\.rtosta\\.zapzap": "ZapZap",
-            "com\\.github\\.fabiocolacio\\.marker": "Marker",
+            "[Mm]arkpad": "Markpad",
             "org\\.keepassxc\\.KeePassXC": "KeePassXC",
             "org\\.gnome\\.Nautilus": "Fichiers",
             "[Tt]hunar": "Fichiers",
@@ -366,14 +366,6 @@
         "on-click": "~/.config/hypr/scripts/ws-key.sh overlay",
         "on-scroll-up": "~/.config/hypr/scripts/ws-key.sh workspace e-1",
         "on-scroll-down": "~/.config/hypr/scripts/ws-key.sh workspace e+1"
-    },
-
-    "custom/ws-tens": {
-        "format": "{}",
-        "return-type": "json",
-        "exec": "[ -f ${XDG_RUNTIME_DIR:-/tmp}/waybar-ws-tens ] && echo '{\"text\": \"+10\", \"class\": \"active\", \"tooltip\": \"Dizaines (11-20) — clic pour revenir aux unités\"}' || echo '{\"text\": \"+10\", \"class\": \"inactive\", \"tooltip\": \"Unités (1-10) — clic pour passer en +10\"}'",
-        "interval": "once",
-        "on-click": "~/.config/waybar/ws-tens-toggle.sh"
     },
 
 

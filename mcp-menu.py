@@ -69,6 +69,7 @@ def _load_script(name):
 # survol sont ceux du popup Sessions Claude : une seule implémentation.
 cm = _load_script("claude-menu")
 HoverActions, glyph_button, run_detached = cm.HoverActions, cm.glyph_button, cm.run_detached
+DEGELE_ET_ECRIT = cm.DEGELE_ET_ECRIT
 herdr, show_herdr, esc = cm.herdr, cm.show_herdr, cm.esc
 
 DEVNULL = subprocess.DEVNULL
@@ -968,8 +969,7 @@ class McpMenu(LayerPopup):
             return
         # Même chemin que herdr-clear : la commande part dans le pane sans
         # frappe simulée, puis on montre la session, où le dialogue s'ouvre.
-        run_detached(["herdr", "agent", "prompt", pane, "/mcp"])
-        herdr("agent", "focus", pane)
+        run_detached(["sh", "-c", DEGELE_ET_ECRIT, "sh", pane, "/mcp", "focus"])
         show_herdr()
         self.close()
 

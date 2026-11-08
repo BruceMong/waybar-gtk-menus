@@ -106,9 +106,11 @@ cs_prune_stale() {
 
 # --- Un scope systemd par session -------------------------------------------
 # cgroup v2 facture la mémoire au cgroup où elle est allouée, et ne la suit
-# pas quand on déplace le processus. Pour qu'une session puisse être gelée et
-# poussée en swap (herdr-freeze, ALT+G : cgroup.freeze + memory.reclaim), il
-# faut donc qu'elle soit dans son scope AVANT d'allouer — d'où ce déplacement
+# pas quand on déplace le processus. Le gel d'une session (herdr-freeze, ALT+G)
+# ne passe plus par là depuis le 2026-11-08 : il ferme Claude. Le scope reste
+# pour l'ordre d'arrêt (Before=herdr-save.service : herdr sauve son état avant
+# que les sessions reçoivent SIGTERM) et pour mesurer qui consomme. Il faut
+# donc que la session soit dans son scope AVANT d'allouer — d'où ce déplacement
 # au SessionStart, Claude et ses enfants déjà lancés compris, les MCP suivants
 # héritant du cgroup. Ce qui a été alloué avant ce hook (~150 Mo de base)
 # reste compté dans le scope du terminal : tant pis, l'essentiel — contexte,

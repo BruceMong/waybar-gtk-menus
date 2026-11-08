@@ -40,7 +40,6 @@ GENERATE = os.path.join(CONFIG_DIR, "generate-config.py")
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
 CLOCK_12H_FLAG = os.path.join(CONFIG_DIR, "clock-12h")
 STEALTH_FLAG = os.path.join(RUNTIME_DIR, "waybar-stealth")
-TENS_FLAG = os.path.join(RUNTIME_DIR, "waybar-ws-tens")
 
 INTERVAL = 30           # tick de secours en mode --watch (secondes)
 DEBOUNCE = 0.4          # calme à attendre après une rafale d'événements Hyprland
@@ -97,7 +96,6 @@ ICON_CELL = {
 # Les modules qui n'apparaissent que dans un état particulier sont mesurés à
 # chaud dans DYNAMIC, pas ici.
 SPECS = {
-    "custom/ws-tens":          ("+10", PAD_MODULE, 13),
     "custom/chrome":           ("\U000f00af", PAD_MODULE, 14),
     "custom/zen":              ("\U000f0239", PAD_MODULE, 14),
     "clock#time":              ("", PAD_MODULE, 13),
@@ -205,10 +203,8 @@ def workspaces_width():
         wss = json.loads(run(["hyprctl", "workspaces", "-j"], "[]"))
     except json.JSONDecodeError:
         return 60
-    tens = os.path.exists(TENS_FLAG)
     shown = [w for w in wss
-             if isinstance(w.get("id"), int)
-             and (11 <= w["id"] <= 20 if tens else 1 <= w["id"] <= 10)]
+             if isinstance(w.get("id"), int) and 1 <= w["id"] <= 10]
     n = max(len(shown), 1)
     # Un bouton = un chiffre + padding: 0 8px + margin: 0 1px (style-normal.css).
     per_button = measure_text("8", 13) + 16 + 2

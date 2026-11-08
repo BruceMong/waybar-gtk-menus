@@ -201,6 +201,17 @@ def esc(text):
     return GLib.markup_escape_text(str(text or ""))
 
 
+# Une session gelée n'a plus d'agent herdr : la dégeler d'abord (si herdr-freeze est installé),
+# puis écrire ; 3e argument non vide = montrer ensuite la session. Lancé détaché, sans personne
+# pour lire une erreur : chaque échec le dit par une notification, et celle d'un envoi raté
+# porte le texte, pour qu'il ne soit pas perdu.
+DEGELE_ET_ECRIT = ('f="$HOME/.local/bin/herdr-freeze"; '
+                   'if [ -x "$f" ]; then "$f" --pane "$1" --degeler >/dev/null 2>&1 '
+                   '|| notify-send -a herdr "Session pas dégelée" "Pane $1 : envoi tenté quand même"; fi; '
+                   'if herdr agent prompt "$1" "$2"; then [ -z "$3" ] || herdr agent focus "$1"; '
+                   'else notify-send -u critical -a herdr "Réponse non envoyée (pane $1)" "$2"; exit 1; fi')
+
+
 def run_detached(argv):
     """Lance une commande sans bloquer le popup ni mourir avec lui."""
     try:
@@ -751,6 +762,8 @@ class ClaudeMenu(LayerPopup):
             title = f"<span style='italic' foreground='{DIM}'>session sans titre</span>"
         else:
             title = f"<span weight='600'>{esc(title)}</span>"
+        if session.get("frozen"):
+            title = f"<span foreground='#0a84ff'>❄</span> {title}"
         ws = session.get("workspace")
         ws_part = (f"   <span foreground='{FAINT}' size='small'>{esc(ws)}</span>"
                    if ws else "")
@@ -805,7 +818,7 @@ class ClaudeMenu(LayerPopup):
         repeindre : une session apparaît, disparaît, ou change d'état."""
         return tuple(sorted((s.get("session_id"), s.get("status"),
                              bool(s.get("addr") or s.get("herdr_pane")),
-                             s.get("title"))
+                             s.get("title"), bool(s.get("frozen")))
                             for s in sessions))
 
     def _tick(self):  # noqa: D401
@@ -1000,7 +1013,7 @@ class ClaudeMenu(LayerPopup):
             return
         if pane:
             # Par le socket : ni focus, ni frappe, ni changement de bureau.
-            run_detached(["herdr", "agent", "prompt", pane, text])
+            run_detached(["sh", "-c", DEGELE_ET_ECRIT, "sh", pane, text, ""])
             self._open_replies.discard(id(revealer))
             self.close()
             return

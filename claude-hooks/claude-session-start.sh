@@ -12,8 +12,8 @@
 # autres états du même pid, ce qui suffit à faire disparaître l'ancienne.
 #
 # cs_scope met ensuite la session dans son propre scope systemd, dès le
-# démarrage : c'est ce qui permet à ~/.local/bin/herdr-freeze (ALT+G) de la
-# geler ET de rendre sa mémoire, cf. claude-session-lib.sh.
+# démarrage : c'est ce qui lui donne `Before=herdr-save.service` (ordre d'arrêt
+# au redémarrage), cf. claude-session-lib.sh. Plus lié au gel (ALT+G ferme Claude).
 
 source "$HOME/.claude/hooks/claude-session-lib.sh"
 

@@ -105,7 +105,6 @@ window#waybar {
 #custom-recorder,
 #custom-voice-rec,
 #custom-updates,
-#custom-ws-tens,
 #custom-calques,
 #systemd-failed-units {
     background-color: transparent;
@@ -198,7 +197,6 @@ window#waybar {
 #custom-recorder:hover,
 #custom-voice-rec:hover,
 #custom-updates:hover,
-#custom-ws-tens:hover,
 #systemd-failed-units:hover,
 #custom-caffeine:hover {
     background-color: @fill;
@@ -228,7 +226,6 @@ window#waybar {
 #custom-recorder:active,
 #custom-voice-rec:active,
 #custom-updates:active,
-#custom-ws-tens:active,
 #systemd-failed-units:active,
 #custom-caffeine:active,
 #workspaces button:active {
@@ -658,22 +655,6 @@ window#waybar {
    reviendrait à insister et à effacer d'un même geste. */
 #custom-dots {
     color: @ink3;
-}
-
-/* ── Bouton mode dizaines (+10) : bascule, donc traité comme une sélection ── */
-#custom-ws-tens {
-    color: @ink3;
-    font-weight: 600;
-}
-
-#custom-ws-tens.active {
-    color: @inkSel;
-    background-color: @fillHard;
-}
-
-#custom-ws-tens.active:hover {
-    background-color: @fillHard;
-    color: @inkSel;
 }
 
 

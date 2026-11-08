@@ -333,6 +333,19 @@ def herdr_run(command, cwd, env):
     return True
 
 
+def frozen_pane_ids():
+    """Panes dont la session Claude est gelée (herdr-freeze --liste) ; vide si herdr-freeze
+    manque (dépôt public : il est facultatif)."""
+    freeze = os.path.expanduser("~/.local/bin/herdr-freeze")
+    if not os.access(freeze, os.X_OK):
+        return set()
+    try:
+        out = subprocess.run([freeze, "--liste"], capture_output=True, text=True, timeout=30).stdout
+        return {g.get("pane") for g in json.loads(out or "[]")}
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return set()
+
+
 def maj_session(command, cwd, env, prompt):
     """Mène la session de mise à jour dans l'onglet Maj du workspace arch-config.
 
@@ -367,6 +380,9 @@ def maj_session(command, cwd, env, prompt):
     panes = [p for p in (herdr("pane", "list", "--workspace", ws) or {}).get("panes", [])
              if p.get("tab_id") == tab]
     agent = next((p for p in panes if p.get("agent") == "claude"), None)
+    if not agent:   # une session gelée n'a plus d'agent herdr : herdr-freeze --liste la connaît
+        gelees = frozen_pane_ids()
+        agent = next((p for p in panes if p["pane_id"] in gelees), None)
 
     if agent:
         pane = agent["pane_id"]
@@ -374,7 +390,7 @@ def maj_session(command, cwd, env, prompt):
         if os.access(freeze, os.X_OK):
             try:   # une session gelée (ALT+G) ne lirait pas le /clear
                 subprocess.run([freeze, "--pane", pane, "--degeler"],
-                               stdout=DEVNULL, stderr=DEVNULL, timeout=30)
+                               stdout=DEVNULL, stderr=DEVNULL, timeout=120)
             except (OSError, subprocess.SubprocessError):
                 pass
         herdr("agent", "focus", pane)

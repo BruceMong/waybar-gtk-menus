@@ -34,6 +34,7 @@ import glob
 import json
 import os
 import subprocess
+import time
 
 STATE_DIR = os.path.join(
     os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "claude-sessions"
@@ -118,6 +119,40 @@ def herdr_agents():
     return out
 
 
+FREEZE = os.path.expanduser("~/.local/bin/herdr-freeze")
+# `herdr-freeze --liste` coûte un sous-processus herdr par session gelée : Waybar relit toutes
+# les 10 s, on garde donc le résultat un peu moins longtemps que ça.
+FROZEN_TTL = 8
+
+
+def frozen_sessions():
+    """session_id -> {pane, tab, nom, cwd, ...} des sessions gelées vivantes (Claude fermé, le
+    pane affiche le lecteur). Vide si herdr-freeze manque (dépôt public : il est facultatif)."""
+    if not os.access(FREEZE, os.X_OK):
+        return {}
+    cache = os.path.join(STATE_DIR, ".gelees.cache")
+    try:
+        if time.time() - os.path.getmtime(cache) < FROZEN_TTL:
+            with open(cache) as fh:
+                return json.load(fh)
+    except (OSError, ValueError):
+        pass
+    try:
+        out = subprocess.run([FREEZE, "--liste"], capture_output=True, text=True, timeout=15).stdout
+        res = {g["sid"]: g for g in json.loads(out or "[]") if g.get("sid")}
+    except Exception:
+        return {}
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        tmp = cache + ".tmp"
+        with open(tmp, "w") as fh:
+            json.dump(res, fh)
+        os.replace(tmp, cache)
+    except OSError:
+        pass
+    return res
+
+
 def herdr_workspace_labels():
     res = _herdr("workspace", "list")
     return {w.get("workspace_id"): w.get("label") or ""
@@ -162,7 +197,7 @@ def _dedupe_by_pid(entries):
     latest = {}
     for path, data in entries:
         # Sans pid exploitable, le fichier reste sa propre identité.
-        key = data.get("pid") or path
+        key = path if data.get("frozen") else (data.get("pid") or path)
         kept = latest.get(key)
         if kept is None:
             latest[key] = (path, data)
@@ -179,6 +214,8 @@ def load_sessions(enrich=False):
     if not os.path.isdir(STATE_DIR):
         return sessions
 
+    frozen = frozen_sessions()
+    seen_sids = set()
     entries = []
     for name in sorted(os.listdir(STATE_DIR)):
         if not name.endswith(".json"):
@@ -191,11 +228,29 @@ def load_sessions(enrich=False):
             # Fichier illisible ou écriture en cours : ignoré ce tour-ci.
             continue
 
-        if not alive(data.get("pid")):
+        gel = frozen.get(data.get("session_id"))
+        if gel:
+            # Claude est fermé (pid mort) mais la session existe : le lecteur la garde au pane.
+            data["frozen"] = True
+            data["herdr_pane"] = gel.get("pane")
+            data["herdr_workspace"] = (gel.get("pane") or "").split(":")[0]
+            data["status"] = "idle"
+        elif not alive(data.get("pid")):
             _drop(path)
             continue
 
+        seen_sids.add(data.get("session_id"))
         entries.append((path, data))
+
+    # Gelée sans fichier d'état (purgé avant le gel, ou session d'avant les hooks) : synthétique.
+    for sid, gel in frozen.items():
+        if sid not in seen_sids:
+            cwd = gel.get("cwd") or ""
+            entries.append((os.path.join(STATE_DIR, f"{sid}.json.gelee"), {
+                "session_id": sid, "frozen": True, "status": "idle", "cwd": cwd,
+                "dir": os.path.basename(cwd), "herdr_pane": gel.get("pane"),
+                "herdr_workspace": (gel.get("pane") or "").split(":")[0],
+                "title": gel.get("nom"), "ts": time.time()}))
 
     focused = active_window()
     # herdr n'est interrogé que si au moins une session y vit : sans lui, la
@@ -204,7 +259,7 @@ def load_sessions(enrich=False):
     herdr_focused = herdr_focused_pane() if agents else ""
     for path, data in _dedupe_by_pid(entries):
         h = agents.get(data.get("session_id"))
-        if h and h.get("pane_id"):
+        if h and h.get("pane_id") and not data.get("frozen"):
             data["herdr_pane"] = h["pane_id"]
             data["herdr_workspace"] = h.get("workspace_id", "")
         # Réponse terminée sur une fenêtre — ou un pane herdr — sous les yeux :

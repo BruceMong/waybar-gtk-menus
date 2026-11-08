@@ -55,8 +55,6 @@ def _script(name):
 # le menu de l'œil et le menu ⋮, pour qu'on retrouve un module là où on
 # l'attend.
 MODULES = [
-    Module(["custom/ws-tens"], "\U000f0b35", "Bouton +10",
-           _script("ws-tens-toggle.sh")),
     # Trois liens rattachent un enfant à la barre, et il faut les couper tous
     # les trois. `setsid -f` n'en coupait qu'un (la session), `uwsm app` en
     # mode scope — son défaut — n'en coupe qu'un autre (le cgroup) :

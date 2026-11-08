@@ -17,12 +17,9 @@ AUTO_HIDDEN_FILE = os.path.join(CONFIG_DIR, "modules-hidden-auto")
 
 ZONES = ("modules-left", "modules-center", "modules-right")
 
-# Mode "dizaines" (+10) : fichier témoin posé/retiré par ws-tens-toggle.sh
 # État de session : $XDG_RUNTIME_DIR est privé à l'utilisateur et vidé à la
 # déconnexion, là où /tmp est partagé entre comptes et survit à la session.
 RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
-TENS_FLAG = os.path.join(RUNTIME_DIR, "waybar-ws-tens")
-TENS_COLOR = "#ebebf0"  # encre primaire (barre monochrome)
 
 # Mode "discret" : fichier témoin posé/retiré par stealth.sh
 # Quand actif, toute la barre est masquée sauf l'œil (clic = ressortir).
@@ -137,30 +134,6 @@ def apply_stealth(cfg):
     cfg["name"] = "stealth"   # -> sélecteur CSS window#waybar.stealth
 
 
-def apply_ws_mode(cfg):
-    """Adapte le module workspaces selon le mode dizaines (+10).
-
-    - mode unités   : chiffres normaux
-    - mode dizaines : chiffres teintés
-
-    Le masquage de la décade d'en face a disparu avec la bascule du module sur
-    `ext/workspaces` (config-full) : `hyprland/workspaces` changeait de bureau
-    en envoyant `dispatch workspace <n>` sur le socket IPC, syntaxe hyprlang
-    qu'Hyprland refuse depuis que la config est en Lua — le clic ne faisait
-    plus rien, en silence. `ext/workspaces` passe par le protocole
-    ext-workspace-v1, mais n'a pas d'option `ignore-workspaces` (waybar
-    l'accepte sans rien en faire). La barre montre donc les bureaux occupés
-    des deux décades ; seule la teinte dit dans laquelle tapent les touches.
-    """
-    ws = cfg.get("ext/workspaces")
-    if not ws:
-        return
-    if os.path.exists(TENS_FLAG):
-        ws["format"] = "<span color='%s'>{name}</span>" % TENS_COLOR
-    else:
-        ws["format"] = "{name}"
-
-
 def apply_overflow_badge(cfg, auto_hidden):
     """Ajoute un compteur sur « ⋮ » quand autofit a replié des modules.
 
@@ -235,7 +208,6 @@ def main():
             cfg[zone] = [m for m in cfg[zone] if m not in hidden]
 
     filter_groups(cfg, hidden)
-    apply_ws_mode(cfg)
     apply_overflow_badge(cfg, auto)
 
     if os.path.exists(STEALTH_FLAG):

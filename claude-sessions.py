@@ -41,7 +41,7 @@ def build_tooltip(sessions):
         age = humanize(now - s.get("ts", now))
         # Le titre identifie la session ; le projet seul ne suffit pas quand
         # plusieurs sessions tournent sur le même dépôt.
-        name = s.get("title") or s.get("dir", "?")
+        name = ("❄ " if s.get("frozen") else "") + (s.get("title") or s.get("dir", "?"))
         project = s.get("dir", "")
         suffix = f"  ({project})" if s.get("title") and project else ""
         lines.append(
