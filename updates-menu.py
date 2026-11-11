@@ -301,18 +301,40 @@ def show_herdr():
                      start_new_session=True, stdout=DEVNULL, stderr=DEVNULL)
 
 
+def workspace_stowed(name):
+    """True (et notification) si le workspace `name` est rangé dans l'Index de Perso (herdr-index) :
+    on ne le recrée pas, l'appelant passe au repli Kitty. Silencieux et faux si herdr-index manque (dépôt public : il est facultatif)."""
+    path = os.path.expanduser("~/.local/bin/herdr-index")
+    if not os.access(path, os.X_OK):
+        return False
+    try:
+        import importlib.machinery
+        import importlib.util
+        loader = importlib.machinery.SourceFileLoader("herdr_index", path)
+        spec = importlib.util.spec_from_loader("herdr_index", loader)
+        mod = importlib.util.module_from_spec(spec)
+        loader.exec_module(mod)
+        return bool(mod.si_ws_range(name))
+    except Exception:
+        return False
+
+
 def herdr_run(command, cwd, env):
     """Tape `command` dans un nouvel onglet herdr du workspace de `cwd`.
 
     Le workspace est celui dont le libellé porte le nom du dossier (un par
     projet, cf. herdr-claude.sh) ; créé s'il manque, et son premier pane sert
-    alors d'onglet. Renvoie False si herdr ne répond pas, pour laisser le
-    repli Kitty prendre la main.
+    alors d'onglet. Renvoie False si herdr ne répond pas ou que le workspace
+    est rangé dans l'Index de Perso, pour laisser le repli Kitty prendre la main.
     """
     listing = herdr("workspace", "list")
     if not listing or "workspaces" not in listing:
         return False
     name = os.path.basename(cwd)
+    if workspace_stowed(name):
+        # Rangé : on ne le recrée pas dans herdr, mais la mise à jour se fait quand même, dans le
+        # Kitty à part du repli (qui ne touche pas à herdr).
+        return False
     ws = next((w["workspace_id"] for w in listing["workspaces"]
                if w.get("label") == name), None)
     env_args = [a for k, v in env.items() for a in ("--env", "%s=%s" % (k, v))]
