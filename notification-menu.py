@@ -2,6 +2,7 @@
 """Popup Notifications pour Waybar (style menu luminosité).
 
 Réglages de notification : Ne pas déranger (switch + minuteries 30 min / 1 h),
+mode Pro (seul le travail s'affiche),
 son des notifications, notifications discrètes (moins larges), notifications
 de Claude Code, notifications et son de Slack.
 
@@ -35,6 +36,10 @@ SLACK_SOUND = os.path.expanduser("~/.local/bin/slack-sound")
 # qui régénère la config swaync et la fait recharger.
 COMPACT_FLAG = os.path.join(CONFIG_DIR, "notif-compact.enabled")
 COMPACT_TOGGLE = os.path.join(CONFIG_DIR, "notif-compact.sh")
+# Mode Pro : seules les applications de notif-pro-allow s'affichent, le reste
+# est rangé en silence dans le centre. Tout est dans notif-pro.sh.
+PRO_FLAG = os.path.join(CONFIG_DIR, "notif-pro.enabled")
+PRO_TOGGLE = os.path.join(CONFIG_DIR, "notif-pro.sh")
 # Opacité des surfaces de swaync, en pourcent. Même script : il réécrit le
 # bloc généré de style-active.css et demande à swaync de relire son CSS.
 # Fichier absent = 72 %, l'alpha écrit en dur dans style.css.
@@ -57,6 +62,7 @@ class NotificationPopup(LayerPopup):
     """
 
     IC_DND = "\U000f009b"      # cloche barrée
+    IC_PRO = "\U000f00d6"      # mallette
     IC_TIMER = "\U000f051b"    # minuteur
     IC_SOUND = "\U000f057e"    # haut-parleur
     IC_COMPACT = "\U000f084c"  # flèches qui se resserrent
@@ -73,6 +79,11 @@ class NotificationPopup(LayerPopup):
         dnd = self.add_card()
         self.switch_dnd = dnd.toggle(self.IC_DND, "Ne pas déranger",
                                      self._dnd_state(), self._on_dnd_toggled)
+        # Sous le même toit que Ne pas déranger : c'est le même réglage en
+        # moins radical — il coupe le perso, pas tout.
+        dnd.toggle(self.IC_PRO, "Mode Pro",
+                   os.path.exists(PRO_FLAG), self._on_pro_toggled,
+                   subtitle="Slack, Claude et herdr seulement")
 
         snooze = self.add_card("Silence temporaire")
         snooze.action(self.IC_TIMER, "30 minutes",
@@ -158,6 +169,18 @@ class NotificationPopup(LayerPopup):
     def _on_dnd_toggled(self, switch, _param):
         subprocess.Popen([DND_TOGGLE, "on" if switch.get_active() else "off"],
                          stdout=DEVNULL, stderr=DEVNULL)
+
+    def _on_pro_toggled(self, switch, _param):
+        on = switch.get_active()
+        done = subprocess.run([PRO_TOGGLE, "on" if on else "off"],
+                              stdout=DEVNULL, stderr=subprocess.PIPE, text=True)
+        if done.returncode != 0:
+            subprocess.Popen(["notify-send", "-a", "swaync", "-u", "critical",
+                              "Mode Pro", done.stderr.strip() or "échec"])
+            return
+        subprocess.Popen(["notify-send", "-a", "swaync", "Mode Pro",
+                          "Activé : le perso est rangé en silence" if on
+                          else "Désactivé"])
 
     def _snooze(self, secs, label):
         if os.path.exists(SNOOZE_PID):

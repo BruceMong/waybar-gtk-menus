@@ -1,5 +1,5 @@
 #!/bin/bash
-# Toggle mode remote : lock + pas de veille + luminosité min + barre rouge
+# Toggle mode remote : pas de veille + luminosité min + barre rouge (sans verrouillage, cf. fin d'activate)
 #
 # « Pas de veille » couvre aussi le capot rabattu : l'inhibiteur porte
 # `handle-lid-switch`, sans quoi logind suspendrait la machine dès la fermeture
@@ -145,21 +145,21 @@ activate() {
             ;;
     esac
 
-    # Sessions Claude gelées (herdr-freeze, s'il est installé) : toutes réveillées, en arrière-plan
-    # — on y accède depuis un autre poste. Le gel est refusé tant que l'unité ci-dessus est
-    # active (herdr-freeze la consulte), donc plus rien ne se regèle avant la sortie du mode ;
-    # à la sortie, le gel automatique reprend tout seul les sessions restées au repos.
-    FREEZE="$(command -v herdr-freeze || echo "$HOME/.local/bin/herdr-freeze")"
-    if [ -x "$FREEZE" ]; then
-        setsid -f "$FREEZE" --tout-degeler >/dev/null 2>&1 < /dev/null
-    fi
+    # Sessions Claude gelées (herdr-freeze) : PAS réveillées en bloc (retiré le 2026-11-15, à la demande
+    # de l'utilisateur). Elles se réveillent une à une, depuis le téléphone (bandeau « Réveiller » de herdr-mobile)
+    # ou par ALT+G. Le gel reste refusé tant que l'unité ci-dessus est active (herdr-freeze la consulte).
 
     # Activer Ne pas déranger (en mémorisant l'état précédent pour le restaurer)
     swaync-client --get-dnd > "$DND_SAVE" 2>/dev/null
     "$STYLE_DIR/dnd-toggle.sh" on
 
     set_style style-remote.css
-    loginctl lock-session
+    # Pas de `loginctl lock-session` (retiré le 2026-11-15, décision de l'utilisateur, projet herdr-mobile) :
+    # en mode remote, on pilote le PC depuis son téléphone, y compris le Chrome du bureau 2
+    # affiché par VNC. hyprlock masquerait cet écran, et le déverrouillage (empreinte, visage) est
+    # impossible à distance. L'écran reste éteint (luminosité 1, panneau coupé capot fermé par
+    # lid-remote.sh) et l'accès réseau passe par Tailscale. hypridle ne verrouille pas non plus :
+    # l'inhibiteur `idle` ci-dessus le bloque. Contrepartie : capot rouvert, la session est ouverte.
 }
 
 case "${1:-toggle}" in

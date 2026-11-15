@@ -6,6 +6,7 @@
 
 CLAUDE_FLAG="$HOME/.config/waybar/claude-notify-focus.disabled"
 SOUND_FLAG="$HOME/.config/waybar/notif-sound.enabled"
+PRO_FLAG="$HOME/.config/waybar/notif-pro.enabled"
 
 dnd="$(swaync-client --get-dnd 2>/dev/null)"
 count="$(swaync-client -c 2>/dev/null)"
@@ -21,6 +22,13 @@ else
     icon=""
     classes+=("inactive")
     dnd_txt="Notifications : actives"
+fi
+
+# Mode Pro : la mallette remplace la cloche (sauf Ne pas déranger, qui coupe
+# davantage et garde donc sa cloche barrée).
+if [ -f "$PRO_FLAG" ]; then
+    classes+=("pro")
+    [ "$dnd" = "true" ] || { icon="󰃖"; icon=$(printf '%b' "$icon"); dnd_txt="Notifications : mode Pro (perso rangé en silence)"; }
 fi
 
 badge=""

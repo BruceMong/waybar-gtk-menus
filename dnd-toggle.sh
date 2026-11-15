@@ -1,6 +1,6 @@
 #!/bin/bash
 # Active/désactive Do Not Disturb (swaync) + coupe le son des notifs zapzap.
-# Usage : dnd-toggle.sh [on|off|toggle]   (défaut : toggle)
+# Usage : dnd-toggle.sh [on|off|toggle|release-sound]   (défaut : toggle)
 
 WATCHER="$HOME/.config/waybar/dnd-mute-watcher.sh"
 PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/dnd-mute-watcher.pid"
@@ -45,6 +45,16 @@ cancel_snooze() {
     fi
 }
 
+PRO_FLAG="$HOME/.config/waybar/notif-pro.enabled"
+
+# Appelé par notif-pro.sh à la sortie du mode Pro, Ne pas déranger éteint :
+# rend le son de ZapZap sans toucher à l'état de swaync.
+if [ "$1" = "release-sound" ]; then
+    stop_watcher
+    unmute_zapzap_sinks
+    exit 0
+fi
+
 action="${1:-toggle}"
 current="$(swaync-client --get-dnd)"
 case "$action" in
@@ -59,8 +69,11 @@ if [ "$(swaync-client --get-dnd)" = "true" ]; then
     # Le watcher ecrit lui-meme son PID dans $PID_FILE
 else
     cancel_snooze
-    stop_watcher
-    unmute_zapzap_sinks
+    # Le mode Pro tient le même coupe-son : on ne le lui retire pas.
+    if [ ! -f "$PRO_FLAG" ]; then
+        stop_watcher
+        unmute_zapzap_sinks
+    fi
 fi
 
 # Rafraichit l'icone Waybar

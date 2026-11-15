@@ -2,7 +2,7 @@
 # Apparence des notifications (swaync) — piloté par le menu notifications de
 # Waybar : interrupteur « Notifications discrètes » et curseur « Opacité ».
 #
-# Usage : notif-compact.sh on|off|toggle|opacity <0-100>|slack on|off|apply|start
+# Usage : notif-compact.sh on|off|toggle|opacity <0-100>|slack on|off|rules|apply|start
 #
 # Deux réglages, deux supports :
 #
@@ -30,6 +30,10 @@ FLAG="$HOME/.config/waybar/notif-compact.enabled"
 # seule chose qui écrit config-active.json. Le SON de Slack est à part : Slack
 # le joue lui-même, cf. ~/.local/bin/slack-sound.
 SLACK_FLAG="$HOME/.config/waybar/slack-notif.disabled"
+# Mode Pro (notif-pro.sh) : présent = seules les applications de
+# notif-pro-allow s'affichent. Même raison d'être ici que Slack.
+PRO_FLAG="$HOME/.config/waybar/notif-pro.enabled"
+PRO="$HOME/.config/waybar/notif-pro.sh"
 OPACITY_FILE="$HOME/.config/waybar/notif-opacity"
 SRC="$HOME/.config/swaync/config.json"
 OUT="$HOME/.config/swaync/config-active.json"
@@ -56,13 +60,21 @@ read_opacity() {
 }
 
 generate_config() {
-    local compact=false slack=false
+    local compact=false slack=false pro=""
     [ -f "$FLAG" ] && compact=true
     [ -f "$SLACK_FLAG" ] && slack=true
+    # Liste vide = pas de règle : « tout sauf rien » couperait tout.
+    [ -f "$PRO_FLAG" ] && pro=$("$PRO" regex)
     # « ignored » et non « muted » : muted range la notification dans le
     # centre et la compte dans le badge de la barre. Slack tient déjà ses
     # propres non-lus.
-    jq --argjson compact "$compact" --argjson slack "$slack" \
+    #
+    # Mode Pro : « muted », lui, parce que le perso doit se retrouver en
+    # sortant du mode. Une règle par urgence et aucune pour Critical — le
+    # champ urgency n'est pas une regex, c'est le seul moyen de dire « tout
+    # sauf critique ». Slack reste écrit AVANT : seule la première règle qui
+    # correspond s'applique, et Slack coupé doit le rester en mode Pro.
+    jq --argjson compact "$compact" --argjson slack "$slack" --arg pro "$pro" \
        --argjson w "$COMPACT_WIDTH" --argjson i "$COMPACT_IMAGE_WIDTH" \
        --argjson h "$COMPACT_IMAGE_HEIGHT" \
        'if $compact then
@@ -73,7 +85,14 @@ generate_config() {
         | if $slack then
             ."notification-visibility".slack =
                 { "state": "ignored", "app-name": "^[Ss]lack$" }
-          else . end' "$SRC" > "$OUT.tmp"
+          else . end
+        | if $pro != "" then
+            ("^(?!(" + $pro + ")$).*") as $re
+            | ."notification-visibility"."pro-normal" =
+                { "state": "muted", "app-name": $re, "urgency": "Normal" }
+            | ."notification-visibility"."pro-low" =
+                { "state": "muted", "app-name": $re, "urgency": "Low" }
+          else . end' "$SRC" > "$OUT.tmp" || { rm -f "$OUT.tmp"; return 1; }
     mv "$OUT.tmp" "$OUT"
 }
 
@@ -235,6 +254,8 @@ case "${1:-toggle}" in
             # redémarrage qu'exige la largeur.
             generate_config
             swaync-client --reload-config >/dev/null 2>&1 ;;
+    # Règles de visibilité seules (mode Pro) : relues à chaud.
+    rules)  generate_config && swaync-client --reload-config >/dev/null 2>&1 ;;
     apply)  apply ;;
     start)  generate; exec swaync -c "$OUT" -s "$STYLE_OUT" ;;
     *)      echo "usage: notif-compact.sh on|off|toggle|opacity <10-100>|slack on|off|apply|start" >&2; exit 1 ;;

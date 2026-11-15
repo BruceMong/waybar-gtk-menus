@@ -1,0 +1,37 @@
+# Mode Pro du menu notifications : ce qui PASSE quand il est actif.
+#
+# Une expression par ligne, comparée au nom d'application ENTIER de la
+# notification (le « -a » de notify-send), en regex étendue : pas de
+# lookahead, ce fichier est lu à la fois par swaync (via notif-compact.sh)
+# et par bash (notif-sound.sh). Tout le reste est rangé en silence dans le
+# centre de notifications, sauf une notification critique, qui passe toujours.
+#
+# Trouver le nom d'une application qui notifie :
+#   dbus-monitor "interface='org.freedesktop.Notifications',member='Notify'"
+#
+# Après modification : ~/.config/waybar/notif-pro.sh apply
+
+# ── Travail ──
+[Ss]lack
+Slack veille
+Claude Code
+herdr.*
+
+# ── Sans nom : les scripts herdr qui n'en donnent pas ──
+notify-send
+
+# ── Réponses à un geste (un réglage qu'on vient de toucher ne doit pas
+#    rester muet) ──
+swaync
+Hyprland
+Affichage
+Disposition
+Micro
+OCR
+QR.*
+Enregistreur.*
+Caf.*
+app-freeze
+app-restart
+phone-mirror
+Bitwarden

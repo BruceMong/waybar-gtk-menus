@@ -21,6 +21,15 @@ CLEAR_QUEUE="${XDG_RUNTIME_DIR:-/tmp}/notif-clear-button.queue"
 
 [ "$(swaync-client --get-dnd 2>/dev/null)" = "true" ] && exit 0
 
+# Mode Pro : une notification rangée en silence (« muted ») déclenche quand
+# même ce script. Sans ce test elle sonnerait, et le bouton « Tout effacer »
+# compterait un popup qui n'existe pas. Même liste que la règle swaync.
+if [ -f "$HOME/.config/waybar/notif-pro.enabled" ] \
+   && [ "${SWAYNC_URGENCY:-Normal}" != "Critical" ]; then
+    PRO_RE=$("$HOME/.config/waybar/notif-pro.sh" regex)
+    [ -n "$PRO_RE" ] && ! [[ "$SWAYNC_APP_NAME" =~ ^($PRO_RE)$ ]] && exit 0
+fi
+
 # -- 1. Compteur de popups --
 if CLEAR_PID=$(cat "$CLEAR_PIDFILE" 2>/dev/null) && [ -n "$CLEAR_PID" ]; then
     printf '%s %s\n' "${SWAYNC_ID:-$RANDOM}" "${SWAYNC_URGENCY:-Normal}" \

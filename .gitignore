@@ -9,6 +9,7 @@ notif-compact.enabled
 notif-opacity
 claude-notify-focus.disabled
 slack-notif.disabled
+notif-pro.enabled
 slack-sound.disabled
 clock-12h
 
